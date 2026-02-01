@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-500: #3b82f6; 
+  --color-primary-600: #2563eb;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "SF Mono", "Menlo", monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-300 font-sans antialiased min-h-screen selection:bg-primary-500/30;
+    background-image: 
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%), 
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl;
+  }
+  
+  .glass-input {
+    @apply bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all outline-none;
+  }
+
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-500 text-white font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] rounded-md px-4 py-2;
+  }
+
+  .btn-secondary {
+    @apply bg-white/5 hover:bg-white/10 text-white border border-white/10 font-medium transition-all active:scale-[0.98] rounded-md px-4 py-2;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-700 rounded-full;
+  }
+}

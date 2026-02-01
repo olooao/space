@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+*.pyc
+__pycache__/
+.env
+.venv
+venv/
+.DS_Store
+space_risk.db
+.vscode/
+frontend/dist/
+*.log
