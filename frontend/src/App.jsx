@@ -2,20 +2,33 @@ import { HashRouter as Router, Routes, Route, Navigate, useLocation } from "reac
 import Navbar from "./components/Navbar";
 import Dashboard from "./pages/Dashboard";
 import LiveMonitor from "./pages/LiveMonitor";
+import MissionControl from "./pages/MissionControl";
 import MissionDemo from "./pages/MissionDemo";
-import Landing from "./pages/Landing"; // Import the new page
+import Landing from "./pages/Landing";
 
 function Layout({ children }) {
   const location = useLocation();
-  // Hide Navbar on Landing Page for full immersion
   const showNav = location.pathname !== "/"; 
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
+    <div className="min-h-screen bg-[#050505] text-green-500 font-mono selection:bg-green-500 selection:text-black flex">
+      
+      {/* 1. Navbar (Fixed Left) */}
       {showNav && <Navbar />}
-      <main className={`flex-grow ${showNav ? 'md:ml-64 p-4 md:p-6' : ''} overflow-hidden`}>
-        {children}
+
+      {/* 2. Main Content Wrapper */}
+      {/* FIX APPLIED: 
+          - Removed 'pt-24' (Top Padding).
+          - Added 'pl-20' (Padding Left 80px) to clear the collapsed sidebar.
+          - Added 'md:pl-24' for slightly more breathing room on desktop.
+          - The expanded sidebar will float OVER the content (Glassmorphism), which prevents the page from "jumping" when you hover.
+      */}
+      <main className={`flex-grow w-full transition-all duration-300 ${showNav ? 'pl-20' : ''}`}>
+        <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
+          {children}
+        </div>
       </main>
+      
     </div>
   );
 }
@@ -25,15 +38,13 @@ function App() {
     <Router>
       <Layout>
         <Routes>
-            {/* Landing is now Home */}
             <Route path="/" element={<Landing />} />
-            
-            {/* Dashboard moved to /dashboard */}
-            <Route path="/dashboard" element={<Dashboard />} />
-            
             <Route path="/live" element={<LiveMonitor />} />
+            <Route path="/analyze" element={<MissionControl />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/demo" element={<MissionDemo />} />
             <Route path="/constellation" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
     </Router>
