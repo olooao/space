@@ -1,72 +1,111 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { 
+  motion, 
+  useMotionValue, 
+  useSpring, 
+  useMotionTemplate, 
+  useTransform 
+} from "framer-motion";
 
-// 1. IMPORT YOUR LOCAL IMAGES
-// Ensure these files exist in "frontend/src/assets/hero/"
+// IMPORT YOUR LOCAL IMAGES
 import baseImgAsset from "../assets/hero/base.png";
 import revealImgAsset from "../assets/hero/Reveal.png"; 
 
 export default function HeroReveal() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
 
+  // --- 1. FLUID PHYSICS ENGINE (The "Heavy" Feel) ---
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  // CONFIG EXPLANATION:
+  // mass: 1.2 -> Heavier object feels more "premium"
+  // stiffness: 200 -> Loose connection to cursor
+  // damping: 50 -> High resistance (stops smoothly like hydraulics)
+  const physicsConfig = { damping: 50, stiffness: 200, mass: 1.2 };
+  
+  const smoothX = useSpring(mouseX, physicsConfig);
+  const smoothY = useSpring(mouseY, physicsConfig);
+
+  // --- 2. PARALLAX EFFECT (Depth) ---
+  // When mouse moves right (0 -> window width), image moves left (-15px)
+  // We use the SMOOTH values so the parallax is also fluid
+  const moveX = useTransform(smoothX, [0, window.innerWidth], [15, -15]);
+  const moveY = useTransform(smoothY, [0, window.innerHeight], [15, -15]);
+
+  // Track Mouse
   useEffect(() => {
     const updateMouse = (e) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
     };
     window.addEventListener("mousemove", updateMouse);
     return () => window.removeEventListener("mousemove", updateMouse);
   }, []);
 
-  // Flashlight Size
-  const maskSize = isHovered ? 400 : 40; 
+  // --- 3. DYNAMIC APERTURE (Size) ---
+  const targetSize = isHovered ? 500 : 100; // Larger reveal for better view
+  const size = useSpring(targetSize, { damping: 30, stiffness: 150 });
+  
+  useEffect(() => { size.set(targetSize) }, [targetSize]);
+
+  // --- 4. THE SOFT MASK ---
+  // 0% -> 100% gradient creates the softest possible edge fade
+  const maskImage = useMotionTemplate`radial-gradient(circle ${size}px at ${smoothX}px ${smoothY}px, black 0%, transparent 100%)`;
 
   return (
     <div 
-      className="relative h-screen w-full overflow-hidden bg-black"
+      className="relative h-screen w-full overflow-hidden bg-slate-950 cursor-crosshair"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* LAYER 1: BASE (The "Boring" Background - Always Visible) */}
-      <div className="absolute inset-0 z-0">
-         {/* Removed opacity/grayscale so you can verify the image works */}
-         <img src={baseImgAsset} className="h-full w-full object-cover" alt="Base Layer" />
-         
-         {/* Optional: Slight tint to make text pop, but lighter than before */}
-         <div className="absolute inset-0 bg-black/40" /> 
-      </div>
-
-      {/* LAYER 2: REVEAL (The "Cool" Image - Hidden except at mouse) */}
+      {/* LAYER 1: BASE (Technical Wireframe) */}
       <motion.div 
-        className="absolute inset-0 z-10 bg-transparent"
-        animate={{
-          WebkitMaskPosition: `${mousePosition.x - maskSize/2}px ${mousePosition.y - maskSize/2}px`,
-          WebkitMaskSize: `${maskSize}px ${maskSize}px`,
-        }}
-        transition={{ type: "tween", ease: "backOut", duration: 0.1 }}
-        style={{
-          WebkitMaskImage: "url('/mask.svg')",
-          // MASK LOGIC: Center (Black/0%) is VISIBLE. Edge (Transparent/100%) is INVISIBLE.
-          // This creates a "Spotlight" effect on the Top Layer.
-          maskImage: `radial-gradient(circle ${maskSize}px at ${mousePosition.x}px ${mousePosition.y}px, black 0%, transparent 100%)` 
-        }}
+        className="absolute inset-0 z-0"
+        style={{ x: moveX, y: moveY, scale: 1.05 }} // Apply Parallax
       >
-          <img src={revealImgAsset} className="h-full w-full object-cover" alt="Reveal Layer" />
+         <img 
+            src={baseImgAsset} 
+            className="h-full w-full object-cover opacity-100 grayscale contrast-125" 
+            alt="Base Layer" 
+         />
+         {/* Cinematic Noise Overlay */}
+         <div className="absolute inset-0 opacity-[0.15] pointer-events-none mix-blend-overlay"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E")` }} 
+         />
       </motion.div>
 
-      {/* TEXT CONTENT */}
-      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center pointer-events-none px-4">
-        <h1 className="text-7xl md:text-9xl font-black tracking-tighter text-white mix-blend-overlay opacity-90">
-          ASRIDE
-        </h1>
-        <p className="text-sm md:text-xl font-mono text-blue-400 mt-4 tracking-[0.5em] uppercase">
-          Orbital Defense System
-        </p>
-      </div>
-      
-      {/* Scroll Indicator */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 animate-bounce text-slate-500">
-        <span className="text-xs uppercase tracking-widest">Scroll to Intercept</span>
+      {/* LAYER 2: REVEAL (Reality) */}
+      <motion.div 
+        className="absolute inset-0 z-10 bg-transparent will-change-[mask-image]"
+        style={{
+          maskImage,
+          WebkitMaskImage: maskImage, 
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
+          x: moveX, y: moveY, scale: 1.05 // Sync Parallax so they stay aligned
+        }}
+      >
+          <img 
+            src={revealImgAsset} 
+            className="h-full w-full object-cover brightness-110 saturate-120" 
+            alt="Reveal Layer" 
+          />
+      </motion.div>
+
+      {/* FOOTER HUD */}
+      <div className="absolute bottom-12 w-full px-12 flex justify-between items-end z-20 pointer-events-none text-xs font-mono text-slate-500">
+        <div className="flex flex-col gap-1">
+            <span>COORDINATES</span>
+            <span className="text-slate-300">34.0522° N, 118.2437° W</span>
+        </div>
+        <div className="animate-bounce text-slate-400">
+            SCROLL TO INTERCEPT
+        </div>
+        <div className="flex flex-col gap-1 text-right">
+            <span>SYSTEM STATUS</span>
+            <span className="text-green-400">ONLINE</span>
+        </div>
       </div>
     </div>
   );
