@@ -99,9 +99,7 @@ export default function HeroReveal() {
             <span>COORDINATES</span>
             <span className="text-slate-300">34.0522° N, 118.2437° W</span>
         </div>
-        <div className="animate-bounce text-slate-400">
-            SCROLL TO INTERCEPT
-        </div>
+    
         <div className="flex flex-col gap-1 text-right">
             <span>SYSTEM STATUS</span>
             <span className="text-green-400">ONLINE</span>
