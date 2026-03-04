@@ -33,18 +33,20 @@ const _dummy = new THREE.Object3D();
 
 function getSatColor(sat) {
   const name = (sat.name || "").toUpperCase();
+  const type = (sat.type || "").toLowerCase();
   if (name.includes("ISS")) return COLORS.ISS;
   if (sat.risk_level === "RED") return COLORS.RED;
   if (sat.risk_level === "YELLOW") return COLORS.YELLOW;
   if (name.includes("STARLINK")) return COLORS.STARLINK;
-  if (sat.type === "debris") return COLORS.DEBRIS;
+  if (type === "debris" || sat.status === "debris" || sat.status === "defunct") return COLORS.DEBRIS;
   return COLORS.GREEN;
 }
 
 function getSatScale(sat) {
   const name = (sat.name || "").toUpperCase();
-  if (name.includes("ISS")) return 2.5;
-  if (sat.risk_level === "RED") return 1.8;
+  if (name.includes("ISS")) return 3.0;
+  if (name.includes("TIANGONG")) return 2.5;
+  if (sat.risk_level === "RED") return 2.0;
   return 1.0;
 }
 

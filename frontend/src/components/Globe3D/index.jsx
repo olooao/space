@@ -4,16 +4,18 @@
  * Optimized for Intel integrated graphics (HD 530 / UHD 6xx).
  *
  * Scene composition (inner → outer):
- * - Earth: day surface + night lights + bump map + cloud layer
- * - Atmosphere: triple-layer Fresnel glow (inner rim + outer halo + pulse)
+ * - Earth: custom day/night shader with city lights + ocean specular
+ * - Atmosphere: single-layer Fresnel edge glow
  * - GlobeGrid: lat/lon coordinate lines + radar sweep
- * - Satellites: InstancedMesh with pulsing emissive glow
+ * - Satellites: InstancedMesh with type-aware colors
  * - OrbitalPaths: animated dashed trajectories + traveling dots
+ * - GroundTracks: surface-projected orbit lines
+ * - CollisionArcs: conjunction warning arcs between at-risk objects
  * - DebrisField: Points particle cloud (Kessler mode)
- * - Stars: lightweight background starfield (600–800 pts)
+ * - Stars: background starfield
  *
- * Lighting: directional sun + blue fill + rim + ambient.
- * Renderer: no antialias, DPR=1 on iGPU, stencil off, alpha off.
+ * Earth handles its own lighting via custom shader.
+ * Scene lights provided for non-shader objects only.
  */
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
@@ -141,6 +143,8 @@ export default function Globe3D({
   debrisFragments = [],
   kesslerMode = false,
   showPaths = false,
+  showGrid = true,
+  showAtmosphere = true,
   className = "",
 }) {
   const allSats = [...satellites, ...constellation];
@@ -269,21 +273,20 @@ export default function Globe3D({
           dpr={[1, maxDpr]}
           onCreated={handleCreated}
         >
-          {/* Starfield — 600-800 pts, minimal GPU cost */}
+          {/* Starfield */}
           <Stars
             radius={200}
             depth={80}
-            count={lp ? 600 : 800}
-            factor={5}
-            saturation={0.1}
+            count={lp ? 800 : 1200}
+            factor={4.5}
+            saturation={0.15}
             fade
-            speed={0.15}
+            speed={0.1}
           />
 
-          {/* Lighting rig: sun + ambient */}
-          <ambientLight intensity={0.35} />
-          {/* Sun — main key light */}
-          <directionalLight position={[5, 3, 5]} intensity={1.2} color="#ffffff" />
+          {/* Lighting for non-shader objects */}
+          <ambientLight intensity={0.3} />
+          <directionalLight position={[5, 3, 5]} intensity={1.0} color="#ffffff" />
 
           <OrbitControls
             enablePan={false}
@@ -299,8 +302,8 @@ export default function Globe3D({
 
           <Suspense fallback={<SceneLoader />}>
             <Earth lowPower={lp} />
-            <Atmosphere lowPower={lp} />
-            <GlobeGrid />
+            {showAtmosphere && <Atmosphere lowPower={lp} />}
+            {showGrid && <GlobeGrid />}
 
             {allSats.length > 0 && <Satellites data={allSats} />}
 
@@ -320,31 +323,6 @@ export default function Globe3D({
           </Suspense>
         </Canvas>
       </CanvasErrorBoundary>
-
-      {/* DOM HUD overlay */}
-      <div className="absolute top-4 left-4 pointer-events-none flex flex-col gap-2">
-        {kesslerMode && (
-          <div className="bg-red-950/80 backdrop-blur border border-red-600/40 rounded-lg px-3 py-1.5">
-            <span className="text-[10px] font-mono font-bold text-red-400 tracking-widest">
-              CASCADE ACTIVE — {debrisFragments.length.toLocaleString()} FRAGMENTS
-            </span>
-          </div>
-        )}
-        {allSats.length > 0 && (
-          <div className="bg-slate-900/70 backdrop-blur border border-white/10 rounded-lg px-3 py-1.5">
-            <span className="text-[10px] font-mono text-cyan-400">
-              {allSats.length} OBJECTS TRACKED
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Zoom hint */}
-      <div className="absolute bottom-4 right-4 pointer-events-none">
-        <span className="text-[9px] text-slate-600 font-mono">
-          SCROLL TO ZOOM · DRAG TO ROTATE
-        </span>
-      </div>
     </div>
   );
 }

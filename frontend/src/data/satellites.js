@@ -89,16 +89,24 @@ export function generateMockAlerts() {
     }));
 }
 
+// Debris flagged for conjunction warning arcs
+const RED_DEBRIS = ['COSMOS 2251 DEB', 'FENGYUN 1C DEB', 'SL-16 R/B'];
+
 // Generate demo satellite positions on globe
 export function generateDemoPositions(satellites, time) {
     return satellites.map((sat, i) => {
         const offset = i * 0.7;
         const speed = sat.regime === 'GEO' ? 0.01 : sat.regime === 'MEO' ? 0.3 : 0.8;
+        const inc = sat.inclination || 45;
+        const alt_km = sat.altitude || 400;
+        const lat = Math.sin(time * speed + offset) * inc;
+        const lon = ((time * speed * 20) + (offset * 50)) % 360;
+
         return {
             name: sat.name,
-            lat: Math.sin(time * speed + offset) * (sat.inclination || 45),
-            lon: ((time * speed * 20) + (offset * 50)) % 360,
-            alt: (sat.altitude || 400) / 6371 * 0.15,
+            lat,
+            lon,
+            alt_km,
             velocity: sat.regime === 'GEO' ? 3.07 : sat.regime === 'MEO' ? 3.9 : 7.66,
             type: sat.type,
             status: sat.status,

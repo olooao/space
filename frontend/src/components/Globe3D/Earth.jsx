@@ -4,10 +4,11 @@
  * Single layer: NASA Blue Marble 2K texture + topology bump map.
  * No overlays, no additive layers — clean, crisp continents.
  *
- * Optimized for Intel HD 530: 2K textures max, no mipmaps on lowPower.
+ * Uses R3F useLoader for Suspense-compatible, cached texture loading
+ * (no race conditions with React StrictMode).
  */
-import { useRef, useState, useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useRef, useMemo } from "react";
+import { useFrame, useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 
 const base = import.meta.env.BASE_URL || "/";
@@ -16,36 +17,30 @@ const TEX_URLS = {
   bump: `${base}textures/earth-topology.png`,
 };
 
-function useTexture(url, colorSpace, lowPower) {
-  const [tex, setTex] = useState(null);
-  useEffect(() => {
-    if (!url) return;
-    let cancelled = false;
-    new THREE.TextureLoader().load(
-      url,
-      (t) => {
-        if (cancelled) return;
-        t.colorSpace = colorSpace;
-        if (lowPower) {
-          t.minFilter = THREE.LinearFilter;
-          t.generateMipmaps = false;
-        }
-        setTex(t);
-      },
-      undefined,
-      (err) => { console.error("[Earth] Texture load failed:", url, err); }
-    );
-    return () => { cancelled = true; };
-  }, [url, colorSpace, lowPower]);
-  return tex;
-}
-
 export default function Earth({ lowPower = false }) {
   const segments = lowPower ? 48 : 64;
   const earthRef = useRef();
 
-  const dayTex = useTexture(TEX_URLS.day, THREE.SRGBColorSpace, lowPower);
-  const bumpTex = useTexture(TEX_URLS.bump, THREE.LinearSRGBColorSpace, lowPower);
+  const dayTex = useLoader(THREE.TextureLoader, TEX_URLS.day);
+  const bumpTex = useLoader(THREE.TextureLoader, TEX_URLS.bump);
+
+  // Set colorSpace + filter once after load
+  useMemo(() => {
+    if (dayTex) {
+      dayTex.colorSpace = THREE.SRGBColorSpace;
+      if (lowPower) {
+        dayTex.minFilter = THREE.LinearFilter;
+        dayTex.generateMipmaps = false;
+      }
+    }
+    if (bumpTex) {
+      bumpTex.colorSpace = THREE.LinearSRGBColorSpace;
+      if (lowPower) {
+        bumpTex.minFilter = THREE.LinearFilter;
+        bumpTex.generateMipmaps = false;
+      }
+    }
+  }, [dayTex, bumpTex, lowPower]);
 
   // Slow rotation
   useFrame((_, delta) => {
@@ -60,8 +55,7 @@ export default function Earth({ lowPower = false }) {
       <meshStandardMaterial
         map={dayTex}
         bumpMap={bumpTex}
-        bumpScale={bumpTex ? 0.012 : 0}
-        color={dayTex ? "#ffffff" : "#1a3a5c"}
+        bumpScale={0.012}
         roughness={0.85}
         metalness={0.0}
       />

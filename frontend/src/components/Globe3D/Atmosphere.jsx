@@ -40,8 +40,8 @@ const glowFrag = /* glsl */ `
 const AtmoGlowMaterial = shaderMaterial(
   {
     glowColor: new THREE.Color(0.3, 0.6, 1.0),
-    intensity: 0.8,
-    power: 6.0,
+    intensity: 0.65,
+    power: 5.0,
   },
   glowVert,
   glowFrag
@@ -53,12 +53,12 @@ export default function Atmosphere({ lowPower = false }) {
 
   return (
     <mesh>
-      <sphereGeometry args={[1.12, seg, seg]} />
+      <sphereGeometry args={[1.08, seg, seg]} />
       {/* eslint-disable-next-line react/no-unknown-property */}
       <atmoGlowMaterial
         glowColor={new THREE.Color(0.3, 0.6, 1.0)}
-        intensity={0.8}
-        power={6.0}
+        intensity={0.65}
+        power={5.0}
         side={THREE.BackSide}
         blending={THREE.AdditiveBlending}
         transparent

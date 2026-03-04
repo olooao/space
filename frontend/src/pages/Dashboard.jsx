@@ -303,6 +303,8 @@ export default function Dashboard() {
           constellation={constellationData}
           kesslerMode={isKessler}
           showPaths={showPaths}
+          showGrid={showGrid}
+          showAtmosphere={showAtmosphere}
           className="w-full h-full"
         />
       </div>
