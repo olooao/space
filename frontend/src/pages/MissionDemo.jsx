@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import EarthSVG from '../EarthSVG';
+import Globe3D from '../components/Globe3D';
 import { Play, RotateCcw, ShieldCheck, AlertTriangle, ArrowRight } from 'lucide-react';
 
 export default function MissionDemo() {
@@ -89,7 +89,7 @@ export default function MissionDemo() {
     };
 
     return (
-        <div className="flex flex-col gap-6 h-full">
+        <div className="flex flex-col gap-6 h-full p-6 md:p-8 overflow-y-auto">
             <header className="flex justify-between items-end border-b border-white/5 pb-4">
                 <div>
                      <h2 className="text-2xl font-display font-bold text-white">Mission Simulator</h2> 
@@ -128,7 +128,7 @@ export default function MissionDemo() {
                         </div>
 
                         <div className="w-full h-full bg-slate-950">
-                            <EarthSVG satellites={satellites} kessler={kesslerActive} />
+                            <Globe3D satellites={satellites} kesslerMode={kesslerActive} />
                         </div>
 
                         {/* Impact Flash Overlay */}

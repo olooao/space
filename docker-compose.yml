@@ -1,0 +1,129 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  tle_service:
+    build: ./backend/services/tle_service
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - TLE_REFRESH_HOURS=4
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  orbital_service:
+    build: ./backend/services/orbital_service
+    ports:
+      - "8002:8002"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - TLE_SERVICE_URL=http://tle_service:8001
+    depends_on:
+      tle_service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  collision_service:
+    build: ./backend/services/collision_service
+    ports:
+      - "8003:8003"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - ORBITAL_SERVICE_URL=http://orbital_service:8002
+    depends_on:
+      orbital_service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  kessler_service:
+    build: ./backend/services/kessler_service
+    ports:
+      - "8004:8004"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - ORBITAL_SERVICE_URL=http://orbital_service:8002
+    depends_on:
+      orbital_service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  events_service:
+    build: ./backend/services/events_service
+    ports:
+      - "8005:8005"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - ORBITAL_SERVICE_URL=http://orbital_service:8002
+      - KESSLER_SERVICE_URL=http://kessler_service:8004
+      - COLLISION_SERVICE_URL=http://collision_service:8003
+    depends_on:
+      orbital_service:
+        condition: service_healthy
+      kessler_service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  gateway:
+    build: ./nginx
+    ports:
+      - "8000:80"
+    depends_on:
+      - tle_service
+      - orbital_service
+      - collision_service
+      - kessler_service
+      - events_service
+    restart: unless-stopped
+
+volumes:
+  redis_data:

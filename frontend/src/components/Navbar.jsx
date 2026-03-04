@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  LayoutDashboard, Activity, Radio, PlayCircle, 
-  Settings, ChevronRight, Command, 
+import {
+  LayoutDashboard, Activity, Radio, PlayCircle,
+  Settings, ChevronRight, Command, Flame,
   ChevronsLeft, ChevronsRight // New Icons for toggle
 } from 'lucide-react';
 
@@ -37,6 +37,7 @@ export default function Navbar() {
   const links = [
     { to: "/dashboard", label: "Risk Command", icon: <LayoutDashboard size={18} /> },
     { to: "/live", label: "Global Monitor", icon: <Activity size={18} /> },
+    { to: "/kessler", label: "Kessler Cascade", icon: <Flame size={18} />, danger: true },
     { to: "/demo", label: "Mission Sim", icon: <PlayCircle size={18} /> },
     { to: "/constellation", label: "Fleet Intel", icon: <Radio size={18} /> },
   ];
@@ -123,9 +124,13 @@ export default function Navbar() {
             >
               {/* ACTIVE BACKGROUND */}
               {isActive && (
-                <motion.div 
+                <motion.div
                     layoutId="activeNav"
-                    className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-transparent rounded-lg border-l-2 border-blue-500"
+                    className={`absolute inset-0 rounded-lg border-l-2 ${
+                      link.danger
+                        ? "bg-gradient-to-r from-red-600/20 to-transparent border-red-500"
+                        : "bg-gradient-to-r from-blue-600/20 to-transparent border-blue-500"
+                    }`}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -133,10 +138,16 @@ export default function Navbar() {
               )}
 
               <div className={`relative flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-300 ${
-                isActive ? "text-blue-100" : "text-slate-400 hover:text-white hover:bg-white/5"
+                isActive
+                  ? link.danger ? "text-red-100" : "text-blue-100"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
               }`}>
                 {/* Icon - Always Visible */}
-                <span className={`transition-colors shrink-0 ${isActive ? "text-blue-400" : "group-hover:text-white"}`}>
+                <span className={`transition-colors shrink-0 ${
+                  isActive
+                    ? link.danger ? "text-red-400" : "text-blue-400"
+                    : link.danger ? "group-hover:text-red-400" : "group-hover:text-white"
+                }`}>
                     {link.icon}
                 </span>
                 

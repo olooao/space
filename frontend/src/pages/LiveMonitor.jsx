@@ -1,48 +1,84 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../services/supabase'
-import { AlertTriangle, Satellite, Crosshair, ShieldAlert, Activity } from 'lucide-react'
+import { AlertTriangle, Satellite, Crosshair, ShieldAlert, Activity, WifiOff } from 'lucide-react'
+import { API_BASE_URL } from '../config/api'
 
 export default function LiveMonitor() {
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
   const [systemStatus, setSystemStatus] = useState("NORMAL")
+  const [dataSource, setDataSource] = useState("unknown")
 
   useEffect(() => {
-    // 1. Fetch History
-    const fetchHistory = async () => {
-      const { data, error } = await supabase
-        .from('risk_events')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(20)
-      
-      if (!error) setAlerts(data)
+    let channel = null
+
+    const fetchData = async () => {
+      // 1. Try Supabase first
+      try {
+        const result = await supabase
+          .from('risk_events')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20)
+
+        if (!result.error && result.data && result.data.length > 0) {
+          setAlerts(result.data)
+          setDataSource("supabase")
+          setLoading(false)
+
+          // Set up realtime subscription
+          channel = supabase
+            .channel('risk_events_live')
+            .on('postgres_changes',
+              { event: 'INSERT', schema: 'public', table: 'risk_events' },
+              (payload) => {
+                const newAlert = payload.new
+                if (newAlert.probability > 80) {
+                  setSystemStatus("CRITICAL")
+                  setTimeout(() => setSystemStatus("NORMAL"), 3000)
+                }
+                setAlerts((prev) => [newAlert, ...prev].slice(0, 50))
+              }
+            )
+            .subscribe()
+          return
+        }
+      } catch (e) {
+        // Supabase not configured or offline
+      }
+
+      // 2. Fallback: try the backend API
+      try {
+        const res = await fetch(`${API_BASE_URL}/collision/feed`)
+        const data = await res.json()
+        if (data.events && data.events.length > 0) {
+          const normalized = data.events.map((e, i) => ({
+            id: e.id || i,
+            primary_asset: e.primary_asset || e.primary,
+            secondary_asset: e.secondary_asset || e.secondary,
+            lat: e.lat, lon: e.lon,
+            miss_distance: e.miss_distance,
+            probability: e.probability,
+            time_to_impact: e.time_to_impact,
+          }))
+          setAlerts(normalized)
+          setDataSource("api")
+        } else {
+          setDataSource("offline")
+        }
+      } catch (e) {
+        setDataSource("offline")
+      }
       setLoading(false)
     }
 
-    fetchHistory()
+    fetchData()
 
-    // 2. Realtime Subscription
-    const channel = supabase
-      .channel('risk_events_live')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'risk_events' }, 
-        (payload) => {
-          const newAlert = payload.new
-          // Trigger a "System Flash" if high risk
-          if (newAlert.probability > 80) {
-             setSystemStatus("CRITICAL")
-             setTimeout(() => setSystemStatus("NORMAL"), 3000)
-          }
-          setAlerts((prev) => [newAlert, ...prev].slice(0, 50))
-        }
-      )
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [])
 
-  // Helper to determine color based on risk
   const getRiskColor = (prob) => {
     if (prob >= 80) return "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] bg-red-950/20 text-red-400"
     if (prob >= 50) return "border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)] bg-orange-950/20 text-orange-400"
@@ -51,11 +87,11 @@ export default function LiveMonitor() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-green-500 font-mono relative overflow-hidden selection:bg-green-500 selection:text-black">
-      
-      {/* 1. CRT Scanline Overlay Effect */}
+
+      {/* CRT Scanline Overlay */}
       <div className="pointer-events-none fixed inset-0 z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] opacity-20"></div>
 
-      {/* 2. Header / HUD */}
+      {/* Header */}
       <div className={`p-6 border-b border-white/10 flex justify-between items-center transition-colors duration-500 ${systemStatus === 'CRITICAL' ? 'bg-red-900/20' : 'bg-black'}`}>
         <div>
           <h1 className="text-3xl font-black tracking-[0.2em] text-white flex items-center gap-3">
@@ -64,31 +100,37 @@ export default function LiveMonitor() {
           </h1>
           <div className="flex gap-4 mt-2 text-xs text-gray-400 uppercase tracking-widest">
             <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> 
-              Live Feed
+              <span className={`w-2 h-2 rounded-full ${dataSource === 'offline' ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></span>
+              {dataSource === 'supabase' ? 'Live Feed (Supabase)' : dataSource === 'api' ? 'API Feed (Backend)' : dataSource === 'offline' ? 'Offline' : 'Connecting...'}
             </span>
-            <span>Lat: {loading ? '---' : '12.44°N'}</span>
-            <span>Lon: {loading ? '---' : '78.22°E'}</span>
           </div>
         </div>
 
-        {/* Big Alert Status Box */}
         <div className={`px-6 py-2 border rounded-sm font-bold tracking-widest ${systemStatus === 'CRITICAL' ? 'border-red-500 text-red-500 animate-pulse' : 'border-green-800 text-green-700'}`}>
           STATUS: {systemStatus}
         </div>
       </div>
 
-      {/* 3. The Feed Grid */}
+      {/* Feed Grid */}
       <div className="max-w-7xl mx-auto p-6 grid gap-4 relative z-10">
-        
+
         {loading && (
             <div className="text-center py-20 text-green-500 animate-pulse">
                 INITIALIZING ORBITAL CALCULATIONS...
             </div>
         )}
 
+        {/* Offline notice */}
+        {!loading && dataSource === 'offline' && (
+          <div className="text-center py-20">
+            <WifiOff className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <p className="text-gray-500 tracking-widest mb-2">NO DATA SOURCE AVAILABLE</p>
+            <p className="text-xs text-gray-600">Start the backend: cd backend && python main.py</p>
+          </div>
+        )}
+
         {/* Column Headers */}
-        {!loading && (
+        {!loading && alerts.length > 0 && (
             <div className="grid grid-cols-12 text-xs text-gray-500 uppercase tracking-widest px-4 mb-2">
                 <div className="col-span-4">Asset / Threat</div>
                 <div className="col-span-2 text-center">Miss Dist</div>
@@ -98,17 +140,16 @@ export default function LiveMonitor() {
             </div>
         )}
 
-        {/* 4. The Alert Cards */}
+        {/* Alert Cards */}
         {alerts.map((alert, index) => (
-          <div 
-            key={alert.id} 
+          <div
+            key={alert.id || index}
             className={`
                 grid grid-cols-12 items-center p-4 border-l-4 rounded-r-lg backdrop-blur-sm transition-all duration-300 hover:scale-[1.01] hover:bg-white/5
                 ${getRiskColor(alert.probability)}
                 ${index === 0 ? 'animate-[slideIn_0.5s_ease-out]' : ''}
             `}
           >
-            {/* Column 1: Names */}
             <div className="col-span-4">
                 <div className="flex items-center gap-3 text-white font-bold text-lg">
                     <Satellite className="w-5 h-5 opacity-70" />
@@ -120,29 +161,24 @@ export default function LiveMonitor() {
                 </div>
             </div>
 
-            {/* Column 2: Distance */}
             <div className="col-span-2 text-center font-mono text-xl">
-                {alert.miss_distance.toFixed(3)} <span className="text-xs opacity-50">km</span>
+                {typeof alert.miss_distance === 'number' ? alert.miss_distance.toFixed(3) : alert.miss_distance} <span className="text-xs opacity-50">km</span>
             </div>
 
-            {/* Column 3: Time */}
             <div className="col-span-2 text-center font-mono text-white/80">
                 T-{alert.time_to_impact}s
             </div>
 
-            {/* Column 4: Risk Bar */}
             <div className="col-span-3 text-right flex flex-col items-end justify-center">
-                <span className="text-2xl font-black">{alert.probability}%</span>
-                {/* Visual Progress Bar */}
+                <span className="text-2xl font-black">{typeof alert.probability === 'number' ? alert.probability.toFixed(1) : alert.probability}%</span>
                 <div className="w-full h-1 bg-gray-800 rounded mt-1 overflow-hidden">
-                    <div 
-                        className={`h-full ${alert.probability > 80 ? 'bg-red-500' : 'bg-blue-500'}`} 
+                    <div
+                        className={`h-full ${alert.probability > 80 ? 'bg-red-500' : 'bg-blue-500'}`}
                         style={{ width: `${alert.probability}%` }}
                     ></div>
                 </div>
             </div>
 
-            {/* Column 5: Icon */}
             <div className="col-span-1 flex justify-end">
                 {alert.probability > 80 && <ShieldAlert className="w-6 h-6 animate-pulse" />}
             </div>

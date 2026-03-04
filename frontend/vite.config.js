@@ -15,7 +15,9 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          viz: ['d3', 'd3-geo', 'recharts', 'topojson-client']
+          viz: ['d3', 'd3-geo', 'recharts', 'topojson-client'],
+          three: ['three'],
+          r3f: ['@react-three/fiber', '@react-three/drei'],
         }
       }
     }

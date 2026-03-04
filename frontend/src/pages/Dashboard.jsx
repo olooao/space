@@ -11,10 +11,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-// --- IMPORT THE 2D TACTICAL ENGINE ---
-import EarthSVG from "../EarthSVG";
-
-const API_URL = "http://127.0.0.1:8000";
+// --- IMPORT THE 3D GLOBE ---
+import Globe3D from "../components/Globe3D";
+import { API_ENDPOINTS } from "../config/api";
 
 // --- MOCK DATA ENGINE (FOR SIMULATION MODE) ---
 const generateMockTelemetry = () => ({
@@ -52,17 +51,24 @@ const Badge = ({ children, variant = "default", className = "" }) => {
   );
 };
 
+const STAT_COLORS = {
+  blue:    "bg-blue-500/10 text-blue-400 group-hover:text-blue-300",
+  red:     "bg-red-500/10 text-red-400 group-hover:text-red-300",
+  amber:   "bg-amber-500/10 text-amber-400 group-hover:text-amber-300",
+  emerald: "bg-emerald-500/10 text-emerald-400 group-hover:text-emerald-300",
+};
+
 const StatCard = ({ label, value, unit, trend, icon: Icon, color = "blue" }) => (
   <div className="bg-slate-900/50 border border-white/5 p-4 rounded-xl flex items-start justify-between group hover:border-white/10 transition-colors">
     <div>
       <p className="text-xs text-slate-500 font-mono uppercase tracking-wider mb-1">{label}</p>
       <div className="flex items-baseline gap-1">
-        <span className={`text-2xl font-bold text-slate-100 font-mono`}>{value}</span>
+        <span className="text-2xl font-bold text-slate-100 font-mono">{value}</span>
         {unit && <span className="text-xs text-slate-500">{unit}</span>}
       </div>
       {trend && <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">▲ {trend}</p>}
     </div>
-    <div className={`p-2 rounded-lg bg-${color}-500/10 text-${color}-400 group-hover:text-${color}-300`}>
+    <div className={`p-2 rounded-lg ${STAT_COLORS[color] || STAT_COLORS.blue}`}>
       <Icon size={18} />
     </div>
   </div>
@@ -108,6 +114,10 @@ export default function Dashboard() {
   // --- KEYBOARD SHORTCUTS ---
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Ignore shortcuts when typing in inputs/textareas
+      const tag = e.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable) return;
+
       if (e.key === "/" && !e.ctrlKey) { e.preventDefault(); setSearchOpen(true); }
       if (e.key === "l" && !e.ctrlKey && !e.metaKey) { setIsLive(prev => !prev); }
       if (e.key === "d" && !e.ctrlKey && !e.metaKey) { setIsDemoMode(prev => !prev); }
@@ -123,9 +133,12 @@ export default function Dashboard() {
     if (isDemoMode) {
       setSatellites(["ISS (ZARYA)", "NOAA 19", "STARLINK-1007", "TIANGONG", "HST", "COSMOS 2251"]);
     } else {
-      axios.get(`${API_URL}/satellites`)
-        .then(res => setSatellites(res.data.satellites))
-        .catch(err => console.warn("API Offline, switching to cached list"));
+      axios.get(API_ENDPOINTS.satellites)
+        .then(res => setSatellites(res.data.satellites || []))
+        .catch(err => {
+          console.warn("API Offline, switching to cached list");
+          setSatellites(["ISS (ZARYA)", "NOAA 19", "STARLINK-1007", "TIANGONG", "HST", "COSMOS 2251"]);
+        });
     }
   }, [isDemoMode]);
 
@@ -153,7 +166,7 @@ export default function Dashboard() {
     } else {
       // REAL API CALL
       try {
-        const res = await axios.post(`${API_URL}/analyze-risk`, {
+        const res = await axios.post(API_ENDPOINTS.analyzeRisk, {
           obj1_name: selection.obj1,
           obj2_name: selection.obj2,
           distance_km: 0, velocity_kms: 7.8 
@@ -215,7 +228,7 @@ export default function Dashboard() {
       })));
     } else {
       try {
-        const res = await axios.get(`${API_URL}/constellation/${name}`);
+        const res = await axios.get(API_ENDPOINTS.constellation(name));
         setConstellationData(res.data.satellites);
       } catch (e) { console.error(e); }
     }
@@ -228,7 +241,7 @@ export default function Dashboard() {
   })();
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30 overflow-hidden">
+    <div className="flex h-full bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30 overflow-hidden">
       
       {/* 2. MAIN WORKSPACE */}
       <main className="flex-1 flex flex-col relative overflow-hidden h-full">
@@ -368,11 +381,12 @@ export default function Dashboard() {
               <div className="col-span-12 lg:col-span-6 relative group">
                  <div className="absolute inset-0 rounded-2xl border border-white/10 overflow-hidden shadow-2xl shadow-black bg-slate-950">
                     
-                    {/* THE 2D SVG COMPONENT (Correctly Rendered) */}
-                    <EarthSVG 
-                        satellites={activeAssets} 
-                        constellation={constellationData} 
-                        kessler={isKessler} 
+                    {/* THE 3D GLOBE COMPONENT */}
+                    <Globe3D
+                        satellites={activeAssets}
+                        constellation={constellationData}
+                        kesslerMode={isKessler}
+                        className="w-full h-full"
                     />
                     
                     {/* OVERLAYS */}

@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../services/supabase' // Keep this for auth if needed later
 import { Crosshair, Shield, AlertTriangle, Search, Zap } from 'lucide-react'
-
-// DIRECT API CALL (Bypassing Supabase for Physics Engine)
-const API_URL = "http://127.0.0.1:8000"
+import { API_BASE_URL } from '../config/api'
 
 export default function MissionControl() {
   const [satellites, setSatellites] = useState([])
@@ -11,13 +8,21 @@ export default function MissionControl() {
   const [obj2, setObj2] = useState('')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   // 1. Load Satellite List on Mount
   useEffect(() => {
-    fetch(`${API_URL}/satellites`)
+    fetch(`${API_BASE_URL}/tle/satellites`)
       .then(res => res.json())
-      .then(data => setSatellites(data.satellites || []))
-      .catch(err => console.error("Radar Down:", err))
+      .then(data => {
+        setSatellites(data.satellites || [])
+        setError(null)
+      })
+      .catch(err => {
+        console.warn("API Offline — using fallback list:", err.message)
+        setSatellites(["ISS (ZARYA)", "NOAA 19", "STARLINK-1007", "TIANGONG", "HST", "COSMOS 2251 DEB"])
+        setError("Backend offline — using cached satellite list")
+      })
   }, [])
 
   // 2. The Attack Button Logic
@@ -27,14 +32,14 @@ export default function MissionControl() {
     setResult(null)
 
     try {
-      const res = await fetch(`${API_URL}/analyze-risk`, {
+      const res = await fetch(`${API_BASE_URL}/collision/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ obj1_name: obj1, obj2_name: obj2 })
       })
       const data = await res.json()
-      
-      // Fake a "Computing" delay for dramatic effect
+
+      // Dramatic "computing" delay
       setTimeout(() => {
           setResult(data)
           setLoading(false)
@@ -42,12 +47,13 @@ export default function MissionControl() {
     } catch (err) {
       console.error("Calculation Failed:", err)
       setLoading(false)
+      setError("Analysis failed — backend may be offline")
     }
   }
 
   return (
     <div className="min-h-screen bg-[#080808] text-green-500 font-mono p-8 selection:bg-green-500 selection:text-black">
-      
+
       {/* Header */}
       <div className="flex items-center gap-4 mb-12 border-b border-white/10 pb-6">
         <Crosshair className="w-8 h-8 text-green-400 animate-[spin_10s_linear_infinite]" />
@@ -57,15 +63,22 @@ export default function MissionControl() {
         </div>
       </div>
 
+      {/* Offline warning */}
+      {error && (
+        <div className="mb-6 px-4 py-2 bg-amber-900/20 border border-amber-600/30 rounded text-amber-400 text-xs font-mono">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
-        
+
         {/* LEFT: CONTROLS */}
         <div className="space-y-8">
-          
+
           {/* Input Group 1 */}
           <div className="relative group">
             <label className="block text-xs font-bold mb-2 text-blue-400 tracking-widest">PRIMARY ASSET (VICTIM)</label>
-            <select 
+            <select
               className="w-full bg-black border border-blue-900/50 p-4 rounded text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all uppercase"
               onChange={(e) => setObj1(e.target.value)}
               value={obj1}
@@ -78,7 +91,7 @@ export default function MissionControl() {
           {/* Input Group 2 */}
           <div className="relative group">
             <label className="block text-xs font-bold mb-2 text-red-400 tracking-widest">SECONDARY OBJECT (THREAT)</label>
-            <select 
+            <select
               className="w-full bg-black border border-red-900/50 p-4 rounded text-white focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 transition-all uppercase"
               onChange={(e) => setObj2(e.target.value)}
               value={obj2}
@@ -89,7 +102,7 @@ export default function MissionControl() {
           </div>
 
           {/* THE BIG BUTTON */}
-          <button 
+          <button
             onClick={handleAnalyze}
             disabled={loading || !obj1 || !obj2}
             className={`
@@ -103,7 +116,7 @@ export default function MissionControl() {
 
         {/* RIGHT: RESULTS DISPLAY */}
         <div className="relative border border-white/10 bg-white/5 rounded-lg p-8 min-h-[400px] flex flex-col justify-center items-center">
-            
+
             {/* 1. IDLE STATE */}
             {!result && !loading && (
                 <div className="text-center opacity-30">
@@ -124,7 +137,7 @@ export default function MissionControl() {
             {/* 3. RESULT STATE */}
             {result && !loading && (
                 <div className="w-full h-full flex flex-col justify-between animate-[fadeIn_0.5s_ease-out]">
-                    
+
                     {/* Header Decision */}
                     <div className={`text-center py-4 border-b ${result.risk_score > 50 ? 'border-red-500/30' : 'border-green-500/30'}`}>
                         <h2 className={`text-3xl font-black ${result.risk_score > 50 ? 'text-red-500' : 'text-green-500'}`}>
@@ -149,8 +162,8 @@ export default function MissionControl() {
                         <div className="bg-black/40 p-4 rounded border border-white/5 col-span-2">
                             <div className="text-xs text-gray-500 tracking-widest mb-1">COLLISION PROBABILITY</div>
                             <div className="w-full bg-gray-800 h-4 rounded-full overflow-hidden mt-2">
-                                <div 
-                                    className={`h-full transition-all duration-1000 ${result.risk_score > 50 ? 'bg-red-500' : 'bg-green-500'}`} 
+                                <div
+                                    className={`h-full transition-all duration-1000 ${result.risk_score > 50 ? 'bg-red-500' : 'bg-green-500'}`}
                                     style={{ width: `${result.risk_score}%` }}
                                 ></div>
                             </div>

@@ -1,12 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime, timedelta
 from skyfield.api import load, wgs84
 import math
+import random
 
 # --- CONFIGURATION ---
 DATABASE_URL = "sqlite:///./space_risk.db"
@@ -17,12 +17,12 @@ TLE_URLS = [
 ]
 
 # --- APP SETUP ---
-app = FastAPI(title="ASRIDE Orbital Defense API", version="2.1.0")
+app = FastAPI(title="ASRIDE Orbital Defense API", version="2.2.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -61,24 +61,17 @@ def get_trajectory(sat, t_now, duration_minutes=90, steps=30):
     """Calculates future path for visualization"""
     path = []
     step_size = duration_minutes / steps
-    
     for i in range(steps):
-        # Calculate time offset
         time_offset = i * step_size
-        # Skyfield time arithmetic
         t_future = ts.from_datetime(t_now.utc_datetime() + timedelta(minutes=time_offset))
-        
         geocentric = sat.at(t_future)
         subpoint = wgs84.subpoint(geocentric)
-        
-        # [Longitude, Latitude] format for GeoJSON
         path.append([subpoint.longitude.degrees, subpoint.latitude.degrees])
-    
     return path
 
 def load_orbital_data():
     """Preloads satellite TLE data into memory for sub-millisecond lookups."""
-    print("⏳ [PHYSICS] Ingesting CelesTrak TLE Data...")
+    print("[PHYSICS] Ingesting CelesTrak TLE Data...")
     try:
         count = 0
         for url in TLE_URLS:
@@ -88,85 +81,37 @@ def load_orbital_data():
                     satellites[sat.name] = sat
                     count += 1
             except Exception as e:
-                print(f"⚠️ [WARNING] Failed source {url}: {e}")
-        print(f"✅ [SYSTEM READY] Tracking {count} active orbital bodies.")
+                print(f"[WARNING] Failed source {url}: {e}")
+        print(f"[SYSTEM READY] Tracking {count} active orbital bodies.")
     except Exception as e:
-        print(f"❌ [CRITICAL] TLE Ingestion Failed: {e}")
+        print(f"[CRITICAL] TLE Ingestion Failed: {e}")
 
 # Run load on startup
 load_orbital_data()
 
-# --- ROUTES ---
 
-import random
+# ===========================================================================
+# CORE ROUTE HANDLERS (shared by legacy and microservice-compatible routes)
+# ===========================================================================
 
-@app.get("/simulation/feed")
-def get_simulation_feed():
-    """
-    Returns a list of simulated high-risk events for the Global Monitor.
-    This simulates real-time physics engine outputs scanning thousands of pairs.
-    """
-    t_now = ts.now()
-    events = []
-    
-    # Randomly pick some satellites to be in "Danger"
-    # In a real system, this would be the output of an all-vs-all SGP4 filter
-    keys = list(satellites.keys())
-    if len(keys) < 10:
-        return {"events": []}
-        
-    for _ in range(5):
-        sat_name = random.choice(keys)
-        sat = satellites[sat_name]
-        
-        # Calculate real position
-        geo = sat.at(t_now)
-        sub = wgs84.subpoint(geo)
-        
-        # Simulate a "Debris Object" near it
-        miss_dist = random.uniform(0.5, 50.0) # 0.5km to 50km
-        prob = 100 * math.exp(-miss_dist / 10)
-        
-        events.append({
-            "id": random.randint(1000, 9999),
-            "primary": sat_name,
-            "secondary": f"DEBRIS-{random.randint(10000, 99999)}",
-            "lat": sub.latitude.degrees,
-            "lon": sub.longitude.degrees,
-            "miss_distance": miss_dist,
-            "probability": prob,
-            "time_to_impact": random.randint(30, 600) # seconds
-        })
-        
-    return {"events": sorted(events, key=lambda x: x['probability'], reverse=True)}
+def _get_satellites_list():
+    return {"satellites": sorted(list(satellites.keys())), "count": len(satellites)}
 
-@app.get("/satellites")
-def get_satellites():
-    return {"satellites": sorted(list(satellites.keys()))}
-
-@app.get("/constellation/{name}")
-def get_constellation(name: str):
-    """
-    Returns positions for an entire constellation (e.g., 'STARLINK', 'GPS').
-    """
+def _get_constellation(name: str):
     t_now = ts.now()
     fleet = []
-    
     search_term = name.upper()
     if "STARLINK" in search_term:
         search_term = "STARLINK"
     elif "GPS" in search_term:
-        search_term = "NAVSTAR" 
-    
+        search_term = "NAVSTAR"
     count = 0
-    MAX_LIMIT = 500 # Performance cap to avoid freezing frontend
-    
+    MAX_LIMIT = 500
     for sat_name, sat in satellites.items():
         if search_term in sat_name.upper():
             try:
                 geocentric = sat.at(t_now)
                 subpoint = wgs84.subpoint(geocentric)
-                
                 fleet.append({
                     "name": sat_name,
                     "lat": subpoint.latitude.degrees,
@@ -176,145 +121,102 @@ def get_constellation(name: str):
                 count += 1
                 if count >= MAX_LIMIT:
                     break
-            except Exception as e:
+            except Exception:
                 continue
-                
     return {"constellation": name, "count": count, "satellites": fleet}
 
-@app.get("/")
-def health_check():
-    return {"status": "operational", "satellites_tracked": len(satellites)}
-
-@app.post("/analyze-risk")
-def analyze_risk(data: CollisionCheck):
+def _analyze_risk(data: CollisionCheck):
     real_distance = None
     obj1_pos = None
     obj2_pos = None
-    
-    # 1. Satellite Resolution (Exact Match Preferred)
+    relative_velocity_km_s = data.velocity_kms
+
+    # Satellite Resolution
     sat1 = satellites.get(data.obj1_name)
     sat2 = satellites.get(data.obj2_name)
-    
-    # Fallback to fuzzy search if not found (e.g. slight casing mismatch)
     if not sat1:
         sat1 = next((s for name, s in satellites.items() if data.obj1_name.upper() in name.upper()), None)
     if not sat2:
         sat2 = next((s for name, s in satellites.items() if data.obj2_name.upper() in name.upper()), None)
 
+    tca_seconds = 0
+
     if sat1 and sat2:
         t = ts.now()
-        
-        # 2. Physics Calculation (SGP4 Propagation)
         geo1 = sat1.at(t)
         geo2 = sat2.at(t)
-        
         pos1 = geo1.position.km
         pos2 = geo2.position.km
-        
-        # Current Euclidean Distance
         current_distance = math.sqrt(sum((p1 - p2) ** 2 for p1, p2 in zip(pos1, pos2)))
 
-        # --- REAL PHYSICS: Time to Closest Approach (TCA) ---
-        # Propagate forward 90 minutes (1 orbit) to find minimum distance
+        # TCA: Propagate 60 minutes
         min_dist = current_distance
-        tca_seconds = 0
-        
-        # Sampling every 30 seconds for 60 minutes
         minutes_to_check = 60
-        steps = 120 
-        
+        steps = 120
         for i in range(1, steps + 1):
             offset_m = (i * minutes_to_check) / steps
             t_future = ts.from_datetime(t.utc_datetime() + timedelta(minutes=offset_m))
-            
             p1_fut = sat1.at(t_future).position.km
             p2_fut = sat2.at(t_future).position.km
-            
             dist_fut = math.sqrt(sum((a - b) ** 2 for a, b in zip(p1_fut, p2_fut)))
-            
             if dist_fut < min_dist:
                 min_dist = dist_fut
                 tca_seconds = offset_m * 60
-
-        # Use the closest approach for risk, not just current
         real_distance = min_dist
 
-        # 3. Geolocation (Sub-point calculation)
         sub1 = wgs84.subpoint(geo1)
         sub2 = wgs84.subpoint(geo2)
-
-        # Calculate Altitude
         alt1 = sub1.elevation.km
         alt2 = sub2.elevation.km
-
-        # Calculate Relative Speed (Scalar)
         vel1 = geo1.velocity.km_per_s
         vel2 = geo2.velocity.km_per_s
         relative_velocity_km_s = math.sqrt(sum((v1 - v2) ** 2 for v1, v2 in zip(vel1, vel2)))
 
-        # --- GENERATE TRAJECTORIES ---
         traj1 = get_trajectory(sat1, t)
         traj2 = get_trajectory(sat2, t)
-        
+
         obj1_pos = {
-            "lat": sub1.latitude.degrees, 
-            "lon": sub1.longitude.degrees, 
-            "alt": alt1,
-            "velocity": math.sqrt(sum(v**2 for v in vel1)),
-            "name": sat1.name, 
-            "path": traj1
+            "lat": sub1.latitude.degrees, "lon": sub1.longitude.degrees,
+            "alt": alt1, "velocity": math.sqrt(sum(v**2 for v in vel1)),
+            "name": sat1.name, "path": traj1
         }
         obj2_pos = {
-            "lat": sub2.latitude.degrees, 
-            "lon": sub2.longitude.degrees, 
-            "alt": alt2,
-            "velocity": math.sqrt(sum(v**2 for v in vel2)),
-            "name": sat2.name, 
-            "path": traj2
+            "lat": sub2.latitude.degrees, "lon": sub2.longitude.degrees,
+            "alt": alt2, "velocity": math.sqrt(sum(v**2 for v in vel2)),
+            "name": sat2.name, "path": traj2
         }
-        
-        # Override MVP defaults with Real Physics
         data.distance_km = real_distance
         data.velocity_kms = relative_velocity_km_s
 
-    # 4. Risk Algorithm
-    # Refined Physic-based Risk Model: Based on Miss Distance and Time to Closest Approach (Simplified)
-    # Basic logic: High risk if distance is low AND they are moving towards similar volume (complex to do fully without propagation)
-    # We will stick to the heuristic: Risk ~ 1 / (Distance * Velocity_Factor)
-    
-    if data.distance_km <= 10: # Critically close
+    # Risk Algorithm
+    if data.distance_km <= 10:
         risk_score = 99.9
     else:
-        # Logistic decay function for smoother probability
-        # 1000km distance -> Low Risk (~5%)
-        # 100km distance -> High Risk (~80%)
-        risk_score = 100 * math.exp(-data.distance_km / 500) 
-        
-        # Velocity weighting: Higher relative velocity increases consequences (risk)
+        risk_score = 100 * math.exp(-data.distance_km / 500)
         if data.velocity_kms > 10:
             risk_score *= 1.2
-            
         risk_score = min(risk_score, 100)
 
-
-    # 5. Decision Matrix
     decision = "SAFE"
     if risk_score > 80: decision = "CRITICAL: COLLISION IMMINENT"
     elif risk_score > 50: decision = "WARNING: MANEUVER ADVISED"
     elif risk_score > 20: decision = "CAUTION: MONITORING"
 
-    # 6. Audit Logging
-    db = SessionLocal()
-    db.add(RiskLog(
-        obj1_name=sat1.name if sat1 else data.obj1_name,
-        obj2_name=sat2.name if sat2 else data.obj2_name,
-        distance_km=round(data.distance_km, 2),
-        velocity_kms=data.velocity_kms,
-        risk_score=round(risk_score, 2),
-        decision=decision
-    ))
-    db.commit()
-    db.close()
+    # Audit Logging
+    try:
+        db = SessionLocal()
+        db.add(RiskLog(
+            obj1_name=sat1.name if sat1 else data.obj1_name,
+            obj2_name=sat2.name if sat2 else data.obj2_name,
+            distance_km=round(data.distance_km, 2),
+            velocity_kms=data.velocity_kms,
+            risk_score=round(risk_score, 2),
+            decision=decision
+        ))
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"[DB] Logging failed: {e}")
 
     return {
         "risk_score": round(risk_score, 2),
@@ -327,9 +229,233 @@ def analyze_risk(data: CollisionCheck):
         "obj2_pos": obj2_pos
     }
 
+def _get_simulation_feed():
+    t_now = ts.now()
+    events = []
+    keys = list(satellites.keys())
+    if len(keys) < 10:
+        return {"events": []}
+    for _ in range(5):
+        sat_name = random.choice(keys)
+        sat = satellites[sat_name]
+        try:
+            geo = sat.at(t_now)
+            sub = wgs84.subpoint(geo)
+        except Exception:
+            continue
+        miss_dist = random.uniform(0.5, 50.0)
+        prob = round(100 * math.exp(-miss_dist / 10), 1)
+        events.append({
+            "id": random.randint(1000, 9999),
+            "primary": sat_name, "primary_asset": sat_name,
+            "secondary": f"DEBRIS-{random.randint(10000, 99999)}",
+            "secondary_asset": f"DEBRIS-{random.randint(10000, 99999)}",
+            "lat": sub.latitude.degrees, "lon": sub.longitude.degrees,
+            "miss_distance": round(miss_dist, 3),
+            "probability": prob,
+            "time_to_impact": random.randint(30, 600)
+        })
+    return {"events": sorted(events, key=lambda x: x['probability'], reverse=True)}
+
+
+# ===========================================================================
+# LEGACY ROUTES (backwards-compatible)
+# ===========================================================================
+
+@app.get("/")
+def health_check():
+    return {"status": "operational", "satellites_tracked": len(satellites)}
+
+@app.get("/satellites")
+def get_satellites_legacy():
+    return _get_satellites_list()
+
+@app.get("/constellation/{name}")
+def get_constellation_legacy(name: str):
+    return _get_constellation(name)
+
+@app.post("/analyze-risk")
+def analyze_risk_legacy(data: CollisionCheck):
+    return _analyze_risk(data)
+
+@app.get("/simulation/feed")
+def get_simulation_feed_legacy():
+    return _get_simulation_feed()
+
 @app.get("/history")
 def get_history():
     db = SessionLocal()
     logs = db.query(RiskLog).order_by(RiskLog.id.desc()).limit(20).all()
     db.close()
     return logs
+
+
+# ===========================================================================
+# MICROSERVICE-COMPATIBLE ROUTES (matches /api/* paths the frontend expects)
+# These allow the frontend to work against the monolith without Docker/Nginx.
+# ===========================================================================
+
+# --- TLE Service routes ---
+tle_router = APIRouter(prefix="/api/tle", tags=["TLE"])
+
+@tle_router.get("/satellites")
+def api_tle_satellites():
+    return _get_satellites_list()
+
+@tle_router.get("/health")
+def api_tle_health():
+    return {"status": "ok", "count": len(satellites)}
+
+app.include_router(tle_router)
+
+# --- Orbital Service routes ---
+orbital_router = APIRouter(prefix="/api/orbital", tags=["Orbital"])
+
+@orbital_router.get("/satellites")
+def api_orbital_satellites():
+    return _get_satellites_list()
+
+@orbital_router.get("/constellation/{name}")
+def api_orbital_constellation(name: str):
+    return _get_constellation(name)
+
+@orbital_router.get("/satellite/{name}/position")
+def api_orbital_position(name: str, trajectory: bool = False):
+    sat = satellites.get(name)
+    if not sat:
+        sat = next((s for n, s in satellites.items() if name.upper() in n.upper()), None)
+    if not sat:
+        return {"error": f"Satellite '{name}' not found"}
+    t = ts.now()
+    geo = sat.at(t)
+    sub = wgs84.subpoint(geo)
+    pos_km = geo.position.km
+    vel = geo.velocity.km_per_s
+    result = {
+        "name": sat.name,
+        "lat": sub.latitude.degrees, "lon": sub.longitude.degrees,
+        "alt_km": sub.elevation.km,
+        "x_km": float(pos_km[0]), "y_km": float(pos_km[1]), "z_km": float(pos_km[2]),
+        "vx_km_s": float(vel[0]), "vy_km_s": float(vel[1]), "vz_km_s": float(vel[2]),
+        "speed_km_s": math.sqrt(sum(v**2 for v in vel)),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    if trajectory:
+        result["path"] = get_trajectory(sat, t)
+    return result
+
+@orbital_router.get("/health")
+def api_orbital_health():
+    return {"status": "ok"}
+
+app.include_router(orbital_router)
+
+# --- Collision Service routes ---
+collision_router = APIRouter(prefix="/api/collision", tags=["Collision"])
+
+@collision_router.post("/analyze")
+def api_collision_analyze(data: CollisionCheck):
+    return _analyze_risk(data)
+
+@collision_router.get("/feed")
+def api_collision_feed():
+    return _get_simulation_feed()
+
+@collision_router.get("/health")
+def api_collision_health():
+    return {"status": "ok"}
+
+app.include_router(collision_router)
+
+# --- Kessler Service routes (simulation stubs for local dev) ---
+kessler_router = APIRouter(prefix="/api/kessler", tags=["Kessler"])
+
+_kessler_state = {
+    "is_running": False,
+    "total_fragments": 0,
+    "active_fragments": 0,
+    "total_cascade_events": 0,
+    "zone_density": {},
+    "elapsed_steps": 0,
+    "simulation_id": None,
+}
+
+@kessler_router.get("/status")
+def api_kessler_status():
+    return _kessler_state
+
+@kessler_router.post("/trigger")
+def api_kessler_trigger():
+    _kessler_state["is_running"] = True
+    _kessler_state["simulation_id"] = f"sim-{random.randint(1000,9999)}"
+    _kessler_state["total_fragments"] = random.randint(500, 3000)
+    _kessler_state["active_fragments"] = _kessler_state["total_fragments"]
+    _kessler_state["total_cascade_events"] = random.randint(1, 5)
+    _kessler_state["zone_density"] = {"200-400": 120, "400-600": 340, "600-800": 890, "800-1000": 1200}
+    return {"message": "Cascade triggered", **_kessler_state}
+
+@kessler_router.post("/stop")
+def api_kessler_stop():
+    _kessler_state["is_running"] = False
+    return {"message": "Cascade stopped"}
+
+@kessler_router.post("/reset")
+def api_kessler_reset():
+    _kessler_state.update({
+        "is_running": False, "total_fragments": 0, "active_fragments": 0,
+        "total_cascade_events": 0, "zone_density": {}, "elapsed_steps": 0,
+        "simulation_id": None,
+    })
+    return {"message": "Reset complete"}
+
+@kessler_router.get("/fragments")
+def api_kessler_fragments(limit: int = 2000):
+    if not _kessler_state["is_running"]:
+        return {"total": 0, "fragments": []}
+    fragments = []
+    t_now = ts.now()
+    keys = list(satellites.keys())
+    for i in range(min(limit, 200)):
+        sat = satellites.get(random.choice(keys)) if keys else None
+        if sat:
+            try:
+                geo = sat.at(t_now)
+                sub = wgs84.subpoint(geo)
+                fragments.append({
+                    "id": i, "lat": sub.latitude.degrees + random.uniform(-5, 5),
+                    "lon": sub.longitude.degrees + random.uniform(-5, 5),
+                    "alt_km": sub.elevation.km + random.uniform(-50, 50),
+                    "generation": random.randint(0, 3), "is_active": True
+                })
+            except Exception:
+                continue
+    return {"total": _kessler_state["total_fragments"], "fragments": fragments}
+
+@kessler_router.get("/solutions")
+def api_kessler_solutions():
+    if not _kessler_state["is_running"]:
+        return {"solutions": []}
+    return {"solutions": [
+        {"zone": "800-1000km", "fragment_count": 1200, "recommended_action": "Active Debris Removal (ADR)",
+         "target_altitude_km": 750, "delta_v_m_s": 45.2, "priority": "CRITICAL", "estimated_clearance_years": 3.5},
+        {"zone": "600-800km", "fragment_count": 890, "recommended_action": "Electrodynamic Tether Deorbit",
+         "target_altitude_km": 550, "delta_v_m_s": 32.1, "priority": "HIGH", "estimated_clearance_years": 5.0},
+    ]}
+
+@kessler_router.get("/events")
+def api_kessler_events(limit: int = 50):
+    return {"events": []}
+
+@kessler_router.get("/health")
+def api_kessler_health():
+    return {"status": "ok"}
+
+app.include_router(kessler_router)
+
+
+# ===========================================================================
+# Entry point for local dev: python backend/main.py
+# ===========================================================================
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
