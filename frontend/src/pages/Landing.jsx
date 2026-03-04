@@ -9,132 +9,62 @@ import {
 } from "framer-motion";
 import HeroReveal from "../components/HeroReveal";
 import {
-  ShieldAlert,
+  ArrowRight,
   Activity,
   Globe,
   Zap,
   Satellite,
-  Crosshair,
-  Terminal,
-  Cpu,
-  Radar,
-  Orbit,
+  Shield,
   Layers,
+  BarChart3,
+  Target,
+  Radio,
 } from "lucide-react";
 
-/* =============================================================================
-   SPACE BACKGROUND LAYERS
-============================================================================= */
+/* ─── Subtle Background ─── */
+const Background = () => (
+  <div className="fixed inset-0 z-0 pointer-events-none">
+    <div className="absolute inset-0 bg-surface-bg" />
+    {/* Very subtle gradient blobs */}
+    <div className="absolute -top-40 left-1/4 w-[800px] h-[800px] bg-accent-blue/[0.03] rounded-full blur-[150px]" />
+    <div className="absolute bottom-[-200px] right-1/4 w-[700px] h-[700px] bg-accent-teal/[0.03] rounded-full blur-[150px]" />
+  </div>
+);
 
-const Starfield = () => {
-  // Pure CSS star layers (cheap + fast)
-  return (
-    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-      {/* Deep base */}
-      <div className="absolute inset-0 bg-slate-950" />
-
-      {/* Nebula blobs */}
-      <div className="absolute -top-40 left-1/4 w-[900px] h-[900px] bg-blue-600/10 rounded-full blur-[140px] mix-blend-screen animate-pulse-slow" />
-      <div className="absolute bottom-[-300px] right-1/4 w-[850px] h-[850px] bg-cyan-500/10 rounded-full blur-[150px] mix-blend-screen" />
-      <div className="absolute top-1/3 right-[-250px] w-[700px] h-[700px] bg-indigo-500/10 rounded-full blur-[160px] mix-blend-screen" />
-
-      {/* Stars */}
-      <div className="absolute inset-0 opacity-[0.25] bg-[radial-gradient(white_1px,transparent_1px)] [background-size:28px_28px]" />
-      <div className="absolute inset-0 opacity-[0.14] bg-[radial-gradient(white_1px,transparent_1px)] [background-size:60px_60px]" />
-      <div className="absolute inset-0 opacity-[0.08] bg-[radial-gradient(white_1px,transparent_1px)] [background-size:120px_120px]" />
-
-      {/* Subtle noise */}
-      <div className="absolute inset-0 opacity-[0.05] bg-[url('https://www.transparenttextures.com/patterns/asfalt-light.png')]" />
-
-      {/* Scanline */}
-      <motion.div
-        className="absolute inset-0 opacity-[0.12]"
-        style={{
-          background:
-            "linear-gradient(to bottom, transparent, rgba(59,130,246,0.15), transparent)",
-        }}
-        animate={{ y: ["-20%", "120%"] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Vignette */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(2,6,23,0.9)_90%)]" />
+/* ─── Navigation Bar ─── */
+const Navbar = () => (
+  <motion.nav
+    initial={{ opacity: 0, y: -10 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+    className="fixed top-0 inset-x-0 z-50 h-16 flex items-center justify-between px-8 pointer-events-auto"
+    style={{
+      background: 'linear-gradient(to bottom, rgba(15,17,21,0.9) 0%, rgba(15,17,21,0) 100%)',
+    }}
+  >
+    <div className="flex items-center gap-3">
+      <div className="w-7 h-7 rounded-lg bg-accent-blue flex items-center justify-center shadow-[0_2px_8px_rgba(76,139,245,0.3)]">
+        <span className="text-white text-[12px] font-bold">O</span>
+      </div>
+      <span className="text-[16px] font-semibold text-text-primary tracking-tight">Orbital</span>
     </div>
-  );
-};
 
-const OrbitLines = () => {
-  return (
-    <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden opacity-[0.35]">
-      <div className="absolute top-1/2 left-1/2 w-[1100px] h-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5" />
-      <div className="absolute top-1/2 left-1/2 w-[900px] h-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-blue-500/10" />
-      <div className="absolute top-1/2 left-1/2 w-[650px] h-[650px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-500/10" />
-
-      {/* Diagonal grid */}
-      <div className="absolute inset-0 opacity-[0.08] bg-[linear-gradient(to_right,rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:80px_80px]" />
+    <div className="hidden md:flex items-center gap-8 text-[13px] font-medium text-text-secondary">
+      <a href="#features" className="hover:text-text-primary transition-colors">Features</a>
+      <a href="#specs" className="hover:text-text-primary transition-colors">Specifications</a>
+      <a href="#cta" className="hover:text-text-primary transition-colors">Get Started</a>
     </div>
-  );
-};
 
-/* =============================================================================
-   TELEMETRY TICKER (SEAMLESS LOOP)
-============================================================================= */
+    <Link to="/dashboard">
+      <button className="btn-primary text-[12px] py-2 px-4 rounded-lg">
+        Launch Console <ArrowRight size={14} />
+      </button>
+    </Link>
+  </motion.nav>
+);
 
-const TelemetryTicker = () => {
-  const items = useMemo(
-    () => [
-      "SYSTEM: ONLINE",
-      "STARLINK-1092: TRACKING",
-      "ISS: NOMINAL",
-      "DEBRIS-99: CONJUNCTION WARNING",
-      "NOAA-19: LINK ESTABLISHED",
-      "GPS-III: ORBIT STABLE",
-      "DEFCON: 5",
-      "LATENCY: 12ms",
-      "PROPAGATION: SGP4",
-      "THREAT MODEL: ACTIVE",
-      "UPLINK: SECURE",
-    ],
-    []
-  );
-
-  const strip = [...items, ...items];
-
-  return (
-    <div className="w-full bg-slate-950/70 border-y border-white/5 backdrop-blur-xl overflow-hidden py-2 flex relative z-30">
-      <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-slate-950 to-transparent z-10" />
-      <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-slate-950 to-transparent z-10" />
-
-      <motion.div
-        className="flex gap-12 whitespace-nowrap will-change-transform"
-        animate={{ x: ["0%", "-50%"] }}
-        transition={{ repeat: Infinity, duration: 28, ease: "linear" }}
-      >
-        {strip.map((item, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 text-[10px] font-mono font-bold text-slate-500 tracking-widest uppercase"
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                item.includes("WARNING")
-                  ? "bg-red-500 animate-pulse"
-                  : "bg-emerald-500"
-              }`}
-            />
-            {item}
-          </div>
-        ))}
-      </motion.div>
-    </div>
-  );
-};
-
-/* =============================================================================
-   FEATURE CARD (SPACE HUD + SPOTLIGHT + SCAN)
-============================================================================= */
-
-const FeatureCard = ({ icon, title, desc, delay, tag }) => {
+/* ─── Feature Card ─── */
+const FeatureCard = ({ icon: Icon, title, desc, delay = 0 }) => {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
@@ -146,315 +76,303 @@ const FeatureCard = ({ icon, title, desc, delay, tag }) => {
 
   const spotlight = useMotionTemplate`
     radial-gradient(
-      650px circle at ${mouseX}px ${mouseY}px,
-      rgba(56,189,248,0.18),
+      400px circle at ${mouseX}px ${mouseY}px,
+      rgba(76,139,245,0.06),
       transparent 70%
     )
   `;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.8, delay, ease: "easeOut" }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
       onMouseMove={handleMouseMove}
-      className="group relative border border-white/10 bg-slate-900/30 rounded-2xl overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
+      className="group relative rounded-2xl border border-white/[0.06] bg-surface-panel/50 overflow-hidden transition-all duration-300 hover:border-white/[0.12] hover:shadow-xl hover:shadow-black/20"
     >
-      {/* Spotlight */}
+      {/* Spotlight on hover */}
       <motion.div
-        className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
         style={{ background: spotlight }}
       />
 
-      {/* Scan shimmer */}
-      <motion.div
-        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100"
-        style={{
-          background:
-            "linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.08), transparent 65%)",
-        }}
-        animate={{ x: ["-60%", "60%"] }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Inner */}
-      <div className="relative p-8 h-full flex flex-col z-10">
-        {/* Top row */}
-        <div className="flex items-start justify-between gap-6 mb-7">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800/50 border border-white/10 group-hover:scale-110 group-hover:border-cyan-400/40 transition-all duration-300">
-            <div className="text-slate-200 group-hover:text-cyan-300 transition-colors">
-              {icon}
-            </div>
-          </div>
-
-          <div className="text-right">
-            <div className="text-[9px] font-mono tracking-widest uppercase text-slate-500">
-              {tag}
-            </div>
-            <div className="mt-1 flex items-center justify-end gap-2 opacity-30 group-hover:opacity-60 transition-opacity">
-              <Crosshair size={12} />
-              <span className="text-[9px] font-mono">SYS.{Math.floor(delay * 100)}</span>
-            </div>
+      <div className="relative p-7 flex flex-col h-full z-10">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-accent-blue/[0.08] border border-accent-blue/[0.12] flex items-center justify-center group-hover:bg-accent-blue/[0.12] transition-colors">
+            <Icon size={20} className="text-accent-blue" strokeWidth={1.8} />
           </div>
         </div>
 
-        <h3 className="text-lg font-bold text-white mb-3 tracking-wide">
+        <h3 className="text-[16px] font-semibold text-text-primary mb-2 group-hover:text-white transition-colors">
           {title}
         </h3>
 
-        <p className="text-slate-400 text-sm leading-relaxed font-light">
+        <p className="text-[13px] text-text-secondary leading-relaxed flex-1">
           {desc}
         </p>
 
-        {/* Footer HUD */}
-        <div className="mt-auto pt-7 flex items-center justify-between">
-          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-          <div className="ml-4 text-[10px] font-mono text-slate-600">
-            READY
-          </div>
+        <div className="mt-5 flex items-center gap-2 text-[12px] font-medium text-accent-blue opacity-0 group-hover:opacity-100 transition-all translate-x-[-4px] group-hover:translate-x-0">
+          Learn more <ArrowRight size={13} />
         </div>
       </div>
-
-      {/* Outer glow */}
-      <div className="absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition duration-300 shadow-[0_0_70px_rgba(34,211,238,0.10)]" />
     </motion.div>
   );
 };
 
-/* =============================================================================
+/* ─── Stat Card ─── */
+const StatCard = ({ value, label, delay = 0 }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 16 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
+    className="text-center"
+  >
+    <div className="text-[32px] font-bold text-text-primary tracking-tight">{value}</div>
+    <div className="text-[13px] text-text-secondary mt-1">{label}</div>
+  </motion.div>
+);
+
+/* ─── Page Link Card ─── */
+const PageCard = ({ to, icon: Icon, title, desc, delay = 0 }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
+  >
+    <Link to={to} className="block">
+      <div className="group p-6 rounded-2xl border border-white/[0.06] bg-surface-panel/30 hover:bg-surface-panel/60 hover:border-white/[0.1] transition-all duration-200 cursor-pointer">
+        <div className="flex items-center justify-between mb-4">
+          <div className="w-10 h-10 rounded-xl bg-accent-blue/[0.08] flex items-center justify-center">
+            <Icon size={20} className="text-accent-blue" strokeWidth={1.8} />
+          </div>
+          <ArrowRight size={16} className="text-text-tertiary group-hover:text-accent-blue group-hover:translate-x-1 transition-all" />
+        </div>
+        <h4 className="text-[15px] font-semibold text-text-primary mb-1 group-hover:text-white transition-colors">{title}</h4>
+        <p className="text-[13px] text-text-secondary leading-relaxed">{desc}</p>
+      </div>
+    </Link>
+  </motion.div>
+);
+
+/* ═══════════════════════════════════════════
    MAIN LANDING
-============================================================================= */
+   ═══════════════════════════════════════════ */
 
 export default function Landing() {
   const containerRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: containerRef });
-
-  // Parallax on orbit lines
-  const orbitY = useTransform(scrollYProgress, [0, 1], [0, -120]);
-  const orbitOpacity = useTransform(scrollYProgress, [0, 0.35], [1, 0]);
 
   return (
     <div
       ref={containerRef}
-      className="bg-slate-950 min-h-screen text-slate-200 selection:bg-cyan-500/30 overflow-x-hidden"
+      className="bg-surface-bg min-h-screen text-text-primary overflow-x-hidden overflow-y-auto font-sans"
+      style={{ height: '100vh', overflowY: 'auto' }}
     >
-      {/* GLOBAL SPACE BACKGROUND */}
-      <div className="fixed inset-0 z-0">
-        <Starfield />
-        <motion.div style={{ y: orbitY, opacity: orbitOpacity }}>
-          <OrbitLines />
+      <Background />
+      <Navbar />
+
+      {/* ── SECTION 1: HERO ── */}
+      <div className="relative z-10 h-screen">
+        <HeroReveal />
+
+        {/* Hero Content Overlay */}
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center px-6 pointer-events-none">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="text-center max-w-3xl"
+          >
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-[12px] font-medium text-text-secondary mb-8 backdrop-blur-sm">
+              <span className="w-[5px] h-[5px] rounded-full bg-status-success" />
+              Operational — Tracking 29,000+ objects
+            </div>
+
+            <h1 className="text-[clamp(36px,6vw,72px)] font-bold text-white leading-[1.05] tracking-tight mb-6">
+              Orbital Awareness,{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-blue to-accent-teal">
+                Reimagined
+              </span>
+            </h1>
+
+            <p className="text-[18px] text-text-secondary leading-relaxed max-w-xl mx-auto mb-10">
+              Real-time collision avoidance and debris tracking for the mega-constellation era.
+              Professional-grade space situational awareness.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pointer-events-auto">
+              <Link to="/dashboard">
+                <button className="btn-primary px-8 py-3.5 text-[14px] rounded-xl shadow-[0_4px_20px_rgba(76,139,245,0.25)]">
+                  Open Console <ArrowRight size={16} />
+                </button>
+              </Link>
+              <Link to="/demo">
+                <button className="btn-ghost px-8 py-3.5 text-[14px] rounded-xl">
+                  <Globe size={16} /> Run Simulation
+                </button>
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Scroll indicator */}
+        <motion.div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2"
+          animate={{ opacity: [0.3, 0.7, 0.3] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          <span className="text-[11px] text-text-tertiary font-medium tracking-wider">Scroll</span>
+          <div className="w-5 h-8 rounded-full border border-white/[0.15] flex items-start justify-center p-1">
+            <motion.div
+              className="w-1 h-2 rounded-full bg-text-secondary"
+              animate={{ y: [0, 10, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            />
+          </div>
         </motion.div>
       </div>
 
-      {/* SECTION 1: HERO REVEAL */}
-      <div className="relative z-10 h-screen">
-        <HeroReveal />
+      {/* ── SECTION 2: STATS ── */}
+      <section className="relative z-20 py-20 px-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
+            <StatCard value="29K+" label="Objects Tracked" delay={0} />
+            <StatCard value="<1ms" label="Latency" delay={0.05} />
+            <StatCard value="SGP4" label="Propagation" delay={0.1} />
+            <StatCard value="99.9%" label="Uptime" delay={0.15} />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Divider ── */}
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       </div>
 
-      {/* CINEMATIC TRANSITION */}
-      <div className="relative z-20 -mt-32 h-56 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/80 to-slate-950" />
-        <div className="absolute inset-0 opacity-[0.12] bg-[radial-gradient(white_1px,transparent_1px)] [background-size:100px_100px]" />
-      </div>
+      {/* ── SECTION 3: FEATURES ── */}
+      <section id="features" className="relative z-20 py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mb-14"
+          >
+            <h2 className="text-[28px] font-bold text-text-primary mb-3">Capabilities</h2>
+            <p className="text-[15px] text-text-secondary max-w-xl">
+              Professional tools for orbital monitoring, threat assessment, and constellation management.
+            </p>
+          </motion.div>
 
-      {/* CONTENT */}
-      <div className="relative z-20 bg-transparent min-h-screen flex flex-col">
-        {/* SECTION 2: MISSION CONTROL TERMINAL */}
-        <section className="relative py-20 px-6">
-          <div className="max-w-6xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, ease: "circOut" }}
-              viewport={{ once: true }}
-              className="relative bg-slate-900/25 backdrop-blur-2xl border border-white/10 rounded-[2.2rem] overflow-hidden shadow-[0_50px_140px_rgba(0,0,0,0.55)]"
-            >
-              {/* Terminal Header */}
-              <div className="h-12 border-b border-white/5 bg-white/5 flex items-center px-6 gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/50" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50" />
-                </div>
-
-                <div className="ml-4 text-[10px] font-mono text-slate-500 tracking-widest flex-1 text-center">
-                  RESTRICTED ACCESS // ASRIDE.OS.V3
-                </div>
-
-                <div className="hidden md:flex items-center gap-2 text-[10px] font-mono text-slate-600 tracking-widest">
-                  <Radar size={14} />
-                  LIVE
-                </div>
-              </div>
-
-              <div className="p-12 md:p-20 text-center relative">
-                {/* HUD corners */}
-                <div className="absolute top-6 left-6 w-5 h-5 border-t border-l border-cyan-400/30" />
-                <div className="absolute top-6 right-6 w-5 h-5 border-t border-r border-cyan-400/30" />
-                <div className="absolute bottom-6 left-6 w-5 h-5 border-b border-l border-cyan-400/30" />
-                <div className="absolute bottom-6 right-6 w-5 h-5 border-b border-r border-cyan-400/30" />
-
-                {/* Status pill */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-400/20 text-cyan-300 text-[10px] font-mono tracking-widest uppercase mb-10"
-                >
-                  <Cpu size={12} className="animate-spin-slow" />
-                  <span>Autonomous Net Active</span>
-                </motion.div>
-
-                <h2 className="text-5xl md:text-8xl font-black text-white mb-8 tracking-tighter leading-[0.9]">
-                  ORBITAL
-                  <br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-b from-cyan-300 via-blue-400 to-slate-900">
-                    SUPREMACY
-                  </span>
-                </h2>
-
-                <p className="text-lg text-slate-400 mb-12 max-w-2xl mx-auto font-light leading-relaxed">
-                  Autonomous collision avoidance for the mega-constellation era.
-                  Track debris, predict conjunctions, and prevent cascade failure
-                  scenarios at scale.
-                </p>
-
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
-                  <Link to="/dashboard">
-                    <button className="relative group px-8 py-4 bg-cyan-500/90 hover:bg-cyan-400 text-slate-950 font-black rounded-xl overflow-hidden transition-all hover:scale-[1.04] active:scale-95 shadow-[0_0_70px_rgba(34,211,238,0.25)]">
-                      <div className="absolute inset-0 opacity-15 bg-[url('https://www.transparenttextures.com/patterns/diagonal-striped-brick.png')]" />
-                      <div className="relative flex items-center gap-3">
-                        <Terminal size={18} />
-                        <span>ENTER CONSOLE</span>
-                      </div>
-                    </button>
-                  </Link>
-
-                  <Link to="/demo">
-                    <button className="px-8 py-4 bg-transparent border border-white/10 text-slate-200 font-bold rounded-xl flex items-center gap-3 hover:bg-white/5 hover:border-white/20 transition-all">
-                      <Globe size={18} />
-                      <span>SIMULATION</span>
-                    </button>
-                  </Link>
-                </div>
-
-                {/* Mini stats */}
-                <div className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
-                  {[
-                    { k: "Objects Tracked", v: "29,000+" },
-                    { k: "Conjunction Alerts", v: "Real-time" },
-                    { k: "Propagation", v: "SGP4 + TLE" },
-                  ].map((s, i) => (
-                    <div
-                      key={i}
-                      className="rounded-2xl border border-white/10 bg-slate-950/30 backdrop-blur-xl p-5"
-                    >
-                      <div className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
-                        {s.k}
-                      </div>
-                      <div className="mt-2 text-2xl font-black text-white">
-                        {s.v}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* bottom glow */}
-              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-cyan-500/10 to-transparent pointer-events-none" />
-            </motion.div>
-          </div>
-        </section>
-
-        {/* TELEMETRY */}
-        <TelemetryTicker />
-
-        {/* SECTION 3: FEATURES */}
-        <section className="py-24 px-6 max-w-7xl mx-auto w-full">
-          <div className="flex flex-col md:flex-row justify-between items-end mb-16 border-b border-white/10 pb-8">
-            <div>
-              <h3 className="text-3xl font-bold text-white mb-2">
-                Technical Specifications
-              </h3>
-              <p className="text-slate-500 font-mono text-xs uppercase tracking-widest">
-                Cleared for Public Release
-              </p>
-            </div>
-            <div className="hidden md:block text-right">
-              <p className="text-slate-500 font-mono text-xs">
-                BUILD: 2026.04.12.RC3
-              </p>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-5">
             <FeatureCard
               delay={0}
-              tag="PROPAGATION"
-              icon={<Orbit size={24} />}
-              title="Real-Time SGP4"
-              desc="Physics-grade orbital propagation with live TLE ingestion and deterministic replay for post-event analysis."
+              icon={Radio}
+              title="Real-Time Tracking"
+              desc="Physics-grade SGP4 orbital propagation with live TLE ingestion and deterministic replay for post-event analysis."
             />
             <FeatureCard
-              delay={0.1}
-              tag="THREAT MODEL"
-              icon={<Zap size={24} />}
-              title="Kessler Event Simulation"
-              desc="Cascade debris modeling with probabilistic density maps, orbit denial zones, and chain reaction forecasting."
+              delay={0.08}
+              icon={Zap}
+              title="Cascade Simulation"
+              desc="Kessler debris modeling with probabilistic density maps, orbit denial zones, and chain reaction forecasting."
             />
+            <FeatureCard
+              delay={0.16}
+              icon={Satellite}
+              title="Constellation Monitor"
+              desc="Continuous tracking for mega-constellations with anomaly detection, orbit drift alerts, and health scoring."
+            />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-5 mt-5">
             <FeatureCard
               delay={0.2}
-              tag="TELEMETRY"
-              icon={<Satellite size={24} />}
-              title="Constellation Monitor"
-              desc="Continuous tracking for mega-constellations with anomaly detection, orbit drift alerts, and health flags."
-            />
-          </div>
-
-          {/* Extra bento row */}
-          <div className="grid md:grid-cols-2 gap-6 mt-6">
-            <FeatureCard
-              delay={0.25}
-              tag="SECURITY"
-              icon={<ShieldAlert size={24} />}
-              title="Secure Command Layer"
-              desc="Defense-grade console access with audit trails, signed actions, and mission history snapshots."
+              icon={Shield}
+              title="Risk Assessment"
+              desc="Automated conjunction analysis with probability-of-collision calculations and actionable avoidance recommendations."
             />
             <FeatureCard
-              delay={0.3}
-              tag="ARCHITECTURE"
-              icon={<Layers size={24} />}
-              title="Mission-Scale Runtime"
-              desc="Built for high-frequency calculations, caching, and real-time dashboards without UI performance collapse."
+              delay={0.24}
+              icon={Layers}
+              title="Mission Architecture"
+              desc="Built for high-frequency computations with efficient caching, real-time dashboards, and zero UI performance collapse."
             />
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* FOOTER */}
-        <footer className="mt-auto border-t border-white/5 py-12 bg-slate-950/30 backdrop-blur-xl">
-          <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center text-slate-600 text-xs font-mono uppercase tracking-widest">
-            <div className="flex items-center gap-4 mb-4 md:mb-0">
-              <Activity size={12} className="text-emerald-500" />
-              <span>SYSTEM NOMINAL</span>
-            </div>
+      {/* ── SECTION 4: EXPLORE PAGES ── */}
+      <section id="specs" className="relative z-20 py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mb-14"
+          >
+            <h2 className="text-[28px] font-bold text-text-primary mb-3">Explore the Platform</h2>
+            <p className="text-[15px] text-text-secondary max-w-xl">
+              Navigate to any module within the orbital command system.
+            </p>
+          </motion.div>
 
-            <div className="flex gap-8">
-              <span className="hover:text-white cursor-pointer transition-colors">
-                Documentation
-              </span>
-              <span className="hover:text-white cursor-pointer transition-colors">
-                API Status
-              </span>
-              <span className="hover:text-white cursor-pointer transition-colors">
-                Legal
-              </span>
-            </div>
-
-            <div>© 2026 ASRIDE DEFENSE</div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <PageCard to="/dashboard" icon={Globe} title="Dashboard" desc="Global telemetry overview with 3D visualization and real-time tracking." delay={0} />
+            <PageCard to="/live" icon={Activity} title="Live Monitor" desc="Real-time satellite feed with position updates and status monitoring." delay={0.06} />
+            <PageCard to="/analyze" icon={Target} title="Mission Control" desc="Risk analysis console for conjunction assessment and avoidance planning." delay={0.12} />
+            <PageCard to="/demo" icon={BarChart3} title="Simulation" desc="Demo environment for testing scenarios and exploring capabilities." delay={0.18} />
+            <PageCard to="/kessler" icon={Zap} title="Kessler Simulator" desc="Debris cascade simulation modeling chain reaction scenarios." delay={0.24} />
           </div>
-        </footer>
-      </div>
+        </div>
+      </section>
+
+      {/* ── SECTION 5: CTA ── */}
+      <section id="cta" className="relative z-20 py-32 px-6">
+        <div className="max-w-3xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="text-[36px] font-bold text-text-primary mb-5 tracking-tight">
+              Ready for launch?
+            </h2>
+            <p className="text-[16px] text-text-secondary mb-10 max-w-lg mx-auto leading-relaxed">
+              Access the orbital command console and start monitoring space objects in real-time.
+            </p>
+            <Link to="/dashboard">
+              <button className="btn-primary px-10 py-4 text-[15px] rounded-xl shadow-[0_4px_20px_rgba(76,139,245,0.25)]">
+                Launch Console <ArrowRight size={18} />
+              </button>
+            </Link>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer className="relative z-20 border-t border-white/[0.04] py-10">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3 text-[13px] text-text-secondary">
+            <div className="w-[5px] h-[5px] rounded-full bg-status-success" />
+            <span>All Systems Operational</span>
+          </div>
+
+          <div className="flex items-center gap-8 text-[13px] text-text-tertiary">
+            <Link to="/dashboard" className="hover:text-text-primary transition-colors">Console</Link>
+            <Link to="/live" className="hover:text-text-primary transition-colors">Tracking</Link>
+            <Link to="/analyze" className="hover:text-text-primary transition-colors">Analysis</Link>
+            <Link to="/demo" className="hover:text-text-primary transition-colors">Demo</Link>
+          </div>
+
+          <div className="text-[12px] text-text-tertiary">
+            © 2026 Orbital Systems
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
