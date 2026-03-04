@@ -16,7 +16,10 @@ from typing import List, Optional
 
 import numpy as np
 
-from .breakup_model import NASABreakupModel, DebrisFragment, R_EARTH, MU_EARTH
+try:
+    from .breakup_model import NASABreakupModel, DebrisFragment, R_EARTH, MU_EARTH
+except ImportError:
+    from breakup_model import NASABreakupModel, DebrisFragment, R_EARTH, MU_EARTH
 
 logger = logging.getLogger(__name__)
 

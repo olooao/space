@@ -30,6 +30,7 @@ import OrbitalPaths from "./OrbitalPaths";
 import GroundTracks from "./GroundTracks";
 import CollisionArcs from "./CollisionArcs";
 import EvasionArcs from "./EvasionArcs";
+import SelectedMarker from "./SelectedMarker";
 import DebrisField from "./DebrisField";
 
 export { latLonAltToVector3 } from "./utils";
@@ -143,6 +144,7 @@ export default function Globe3D({
   conjunctions = [],
   evasionManeuvers = [],
   debrisFragments = [],
+  selectedSatellite = null,
   kesslerMode = false,
   showPaths = false,
   showGrid = true,
@@ -321,6 +323,8 @@ export default function Globe3D({
             <CollisionArcs conjunctions={conjunctions} satellites={allSats} />
 
             <EvasionArcs data={evasionManeuvers} />
+
+            {selectedSatellite && <SelectedMarker satellite={selectedSatellite} />}
 
             {kesslerMode && debrisFragments.length > 0 && (
               <DebrisField fragments={debrisFragments} />

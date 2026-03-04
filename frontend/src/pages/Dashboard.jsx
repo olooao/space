@@ -8,7 +8,7 @@ import TopStatusBar from "../components/TopStatusBar";
 import BottomTelemetryBar from "../components/BottomTelemetryBar";
 import RightControlPanel from "../components/RightControlPanel";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, ArrowRight, Satellite, AlertTriangle, Radio, Shield, ShieldCheck, Activity, Zap, Globe, ChevronRight, X } from "lucide-react";
+import { Search, ArrowRight, Satellite, AlertTriangle, Radio, Shield, ShieldCheck, Activity, Zap, Globe, ChevronRight, X, Clock, Target, Flame, ArrowDown } from "lucide-react";
 
 /* ═══════════════════════════════════════════
    ANIMATED COUNTER
@@ -67,6 +67,16 @@ function AlertCard({ alert, index, onSelect, evasion }) {
   const risk = parseFloat(alert.probability);
   const riskColor = risk > 60 ? 'text-status-critical' : risk > 30 ? 'text-status-warning' : 'text-accent-blue';
   const riskBg = risk > 60 ? 'bg-status-critical/10 border-status-critical/20' : risk > 30 ? 'bg-status-warning/10 border-status-warning/20' : 'bg-accent-blue/[0.06] border-accent-blue/20';
+  const riskBarColor = risk > 60 ? 'bg-status-critical' : risk > 30 ? 'bg-status-warning' : 'bg-accent-blue';
+  const riskLabel = risk > 60 ? 'CRITICAL' : risk > 30 ? 'WARNING' : 'LOW';
+
+  // TCA countdown
+  const tcaDate = alert.tca ? new Date(alert.tca) : null;
+  const now = new Date();
+  const hoursUntilTca = tcaDate ? Math.max(0, (tcaDate - now) / 3600000) : null;
+  const tcaString = hoursUntilTca !== null
+    ? hoursUntilTca < 1 ? `${Math.round(hoursUntilTca * 60)}m` : `${hoursUntilTca.toFixed(1)}h`
+    : null;
 
   return (
     <motion.div
@@ -81,22 +91,161 @@ function AlertCard({ alert, index, onSelect, evasion }) {
           <AlertTriangle size={12} className={riskColor} />
           <span className="text-[12px] font-semibold text-text-primary group-hover:text-white transition-colors">{alert.primary}</span>
         </div>
-        <span className={`text-[11px] font-bold ${riskColor} px-2 py-0.5 rounded-md border ${riskBg}`}>
-          {alert.probability}%
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-[9px] font-bold uppercase tracking-wider ${riskColor}`}>{riskLabel}</span>
+          <span className={`text-[11px] font-bold ${riskColor} px-2 py-0.5 rounded-md border ${riskBg}`}>
+            {alert.probability}%
+          </span>
+        </div>
       </div>
-      <div className="flex items-center gap-4 text-[11px] text-text-tertiary">
-        <span>vs {alert.secondary}</span>
+      {/* Risk probability bar */}
+      <div className="h-[2px] rounded-full bg-white/[0.06] mb-1.5 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(risk, 100)}%` }}
+          transition={{ delay: index * 0.05 + 0.2, duration: 0.6, ease: "easeOut" }}
+          className={`h-full rounded-full ${riskBarColor}`}
+        />
+      </div>
+      <div className="flex items-center gap-3 text-[11px] text-text-tertiary">
+        <span className="flex items-center gap-1"><Target size={9} /> vs {alert.secondary}</span>
         <span>·</span>
         <span>{alert.missDistance} km</span>
+        {tcaString && (
+          <>
+            <span>·</span>
+            <span className="flex items-center gap-1"><Clock size={9} /> TCA {tcaString}</span>
+          </>
+        )}
       </div>
       {evasion && (
-        <div className="flex items-center gap-1.5 mt-1.5 text-[10px]">
-          <ShieldCheck size={10} className="text-green-400" />
-          <span className="text-green-400 font-semibold">EVASION COMPUTED</span>
-          <span className="text-text-tertiary">· {evasion.direction} · {evasion.magnitude_m_s?.toFixed(1)} m/s · {evasion.fuel_kg?.toFixed(1)} kg</span>
+        <div className="flex items-center gap-1.5 mt-2 px-2 py-1.5 rounded-lg bg-green-500/[0.06] border border-green-500/[0.12]">
+          <ShieldCheck size={11} className="text-green-400" />
+          <span className="text-[10px] text-green-400 font-semibold">EVASION READY</span>
+          <span className="text-[10px] text-text-tertiary ml-auto">{evasion.direction} · ΔV {evasion.magnitude_m_s?.toFixed(1)} m/s · {evasion.fuel_kg?.toFixed(1)} kg</span>
         </div>
       )}
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   KESSLER CASCADE PANEL
+   ═══════════════════════════════════════════ */
+function KesslerPanel({ status, solutions, events, onClose }) {
+  if (!status) return null;
+
+  const priorityColor = {
+    CRITICAL: 'text-status-critical',
+    HIGH: 'text-status-warning',
+    MEDIUM: 'text-accent-blue',
+  };
+  const priorityBg = {
+    CRITICAL: 'bg-status-critical/10 border-status-critical/20',
+    HIGH: 'bg-status-warning/10 border-status-warning/20',
+    MEDIUM: 'bg-accent-blue/[0.06] border-accent-blue/20',
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+      className="absolute top-16 right-[330px] z-20 w-[320px] max-h-[calc(100vh-100px)] pointer-events-auto"
+    >
+      <div className="glass-surface rounded-2xl shadow-2xl shadow-black/30 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-divider flex items-center justify-between bg-red-500/[0.04]">
+          <div className="flex items-center gap-2">
+            <Flame size={14} className="text-status-critical" />
+            <span className="text-[13px] font-semibold text-text-primary">Kessler Cascade</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {status.is_running && <span className="w-2 h-2 rounded-full bg-status-critical animate-pulse" />}
+            <span className="text-[10px] font-mono text-text-tertiary">
+              {status.is_running ? 'ACTIVE' : 'STOPPED'}
+            </span>
+            <button onClick={onClose} className="p-1 rounded-md hover:bg-white/[0.06] text-text-tertiary">
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-3 gap-px bg-divider/50">
+          {[
+            ['Fragments', status.active_fragments?.toLocaleString() || '0'],
+            ['Cascades', status.total_cascade_events || '0'],
+            ['Steps', status.elapsed_steps || '0'],
+          ].map(([label, val]) => (
+            <div key={label} className="bg-surface-bg px-3 py-2.5 text-center">
+              <div className="text-[14px] font-mono font-bold text-text-primary">{val}</div>
+              <div className="text-[9px] text-text-tertiary uppercase tracking-wider mt-0.5">{label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto scrollbar-hide max-h-[400px]">
+          {/* Solutions */}
+          {solutions.length > 0 && (
+            <div className="px-4 py-3 border-b border-divider">
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <ArrowDown size={11} className="text-green-400" />
+                <span className="text-[11px] font-semibold text-text-primary uppercase tracking-wider">Deorbit Solutions</span>
+              </div>
+              <div className="space-y-2">
+                {solutions.map((sol, i) => (
+                  <div key={i} className={`p-2.5 rounded-lg border ${priorityBg[sol.priority] || priorityBg.MEDIUM}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-text-primary">{sol.zone}</span>
+                      <span className={`text-[9px] font-bold uppercase ${priorityColor[sol.priority] || 'text-text-tertiary'}`}>
+                        {sol.priority}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-text-tertiary">
+                      <span>{sol.fragment_count} frags</span>
+                      <span>·</span>
+                      <span className="text-green-400 font-semibold">ΔV {sol.delta_v_m_s} m/s</span>
+                      <span>·</span>
+                      <span>→ {sol.target_altitude_km} km</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Events Timeline */}
+          {events.length > 0 && (
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <Zap size={11} className="text-status-warning" />
+                <span className="text-[11px] font-semibold text-text-primary uppercase tracking-wider">Cascade Events</span>
+              </div>
+              <div className="space-y-1.5">
+                {events.slice(-8).reverse().map((evt, i) => (
+                  <div key={i} className="flex items-start gap-2 py-1.5">
+                    <div className="mt-1 w-[6px] h-[6px] rounded-full shrink-0"
+                      style={{
+                        backgroundColor: evt.generation === 0 ? '#ef4444' : evt.generation === 1 ? '#f97316' : '#eab308',
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-text-primary font-medium truncate">
+                        Gen {evt.generation}: {evt.target || evt.victim_satellite || '?'}
+                      </div>
+                      <div className="text-[10px] text-text-tertiary">
+                        {evt.fragments_generated || evt.new_fragments || 0} fragments at {Math.round(evt.alt_km || 0)} km
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -205,6 +354,11 @@ export default function Dashboard() {
   const [showAlerts, setShowAlerts] = useState(true);
   const [debrisFragments, setDebrisFragments] = useState([]);
   const [evasionManeuvers, setEvasionManeuvers] = useState([]);
+  const [lastUpdateTime, setLastUpdateTime] = useState(null);
+  const [kesslerStatus, setKesslerStatus] = useState(null);
+  const [kesslerSolutions, setKesslerSolutions] = useState([]);
+  const [kesslerEvents, setKesslerEvents] = useState([]);
+  const [showKesslerPanel, setShowKesslerPanel] = useState(false);
   const prevKessler = useRef(false);
 
   const satDb = useMemo(() => SATELLITE_DATABASE, []);
@@ -246,6 +400,7 @@ export default function Dashboard() {
       const time = Date.now() / 1000;
       const positions = generateDemoPositions(satDb, time);
       setActiveAssets(positions);
+      setLastUpdateTime(new Date());
     } else {
       axios.post(API_ENDPOINTS.analyzeRisk, {
         obj1_name: selectedSat, obj2_name: "NOAA 19",
@@ -312,53 +467,107 @@ export default function Dashboard() {
       .filter(Boolean);
   }, [alerts, activeAssets]);
 
-  // ─── Kessler Debris Generation ───
+  // ─── Kessler Cascade (Real API + Demo fallback) ───
   useEffect(() => {
     if (isKessler && !prevKessler.current) {
-      // Just toggled ON — generate debris cloud around debris objects
-      const debrisSources = activeAssets.filter(
-        s => s.status === 'debris' || s.status === 'defunct'
-      );
-      const fragments = [];
-      const FRAGS_PER_SOURCE = 200;
-      debrisSources.forEach((source) => {
-        for (let i = 0; i < FRAGS_PER_SOURCE; i++) {
-          const spread = 15;
-          fragments.push({
-            lat: source.lat + (Math.random() - 0.5) * spread,
-            lon: source.lon + (Math.random() - 0.5) * spread,
-            alt_km: (source.alt_km || 400) + (Math.random() - 0.5) * 200,
-            generation: Math.floor(Math.random() * 4),
-          });
-        }
-      });
-      setDebrisFragments(fragments);
+      // Just toggled ON
+      setShowKesslerPanel(true);
+
+      if (!isDemoMode) {
+        // LIVE MODE: Trigger real cascade via API
+        axios.post(API_ENDPOINTS.kesslerTrigger, null, {
+          params: { target_name: 'ISS (ZARYA)', projectile_mass_kg: 950, relative_velocity_km_s: 10.5 }
+        }).then(res => {
+          setKesslerStatus(res.data);
+        }).catch(() => {});
+      } else {
+        // DEMO MODE: Generate debris locally
+        const debrisSources = activeAssets.filter(
+          s => s.status === 'debris' || s.status === 'defunct'
+        );
+        const fragments = [];
+        debrisSources.forEach((source) => {
+          for (let i = 0; i < 200; i++) {
+            fragments.push({
+              lat: source.lat + (Math.random() - 0.5) * 15,
+              lon: source.lon + (Math.random() - 0.5) * 15,
+              alt_km: (source.alt_km || 400) + (Math.random() - 0.5) * 200,
+              generation: Math.floor(Math.random() * 4),
+            });
+          }
+        });
+        setDebrisFragments(fragments);
+        setKesslerStatus({
+          is_running: true, active_fragments: fragments.length,
+          total_cascade_events: 3, elapsed_steps: 0,
+        });
+        setKesslerSolutions([
+          { zone: '700-800km', fragment_count: 120, delta_v_m_s: 13.2, target_altitude_km: 650, priority: 'HIGH', estimated_clearance_years: 12 },
+          { zone: '800-900km', fragment_count: 85, delta_v_m_s: 12.9, target_altitude_km: 750, priority: 'MEDIUM', estimated_clearance_years: 15 },
+        ]);
+      }
     } else if (!isKessler) {
+      // Toggled OFF
+      setShowKesslerPanel(false);
       setDebrisFragments([]);
+      setKesslerStatus(null);
+      setKesslerSolutions([]);
+      setKesslerEvents([]);
+      if (!isDemoMode) {
+        axios.post(API_ENDPOINTS.kesslerStop).catch(() => {});
+      }
     }
     prevKessler.current = isKessler;
-  }, [isKessler]); // activeAssets intentionally excluded
+  }, [isKessler]); // activeAssets & isDemoMode intentionally excluded
 
-  // ─── Evasion Maneuver Computation ───
+  // ─── Kessler Live Polling (fragments + status + solutions) ───
   useEffect(() => {
-    const redAlerts = alerts.filter(a => parseFloat(a.probability) > 60);
-    if (redAlerts.length === 0 || activeAssets.length === 0) {
+    if (!isKessler || isDemoMode) return;
+
+    const poll = async () => {
+      try {
+        const [statusRes, fragsRes, solsRes, evtsRes] = await Promise.all([
+          axios.get(API_ENDPOINTS.kesslerStatus),
+          axios.get(API_ENDPOINTS.kesslerFragments, { params: { limit: 2000 } }),
+          axios.get(API_ENDPOINTS.kesslerSolutions),
+          axios.get(API_ENDPOINTS.kesslerEvents),
+        ]);
+        setKesslerStatus(statusRes.data);
+        setDebrisFragments(fragsRes.data.fragments || []);
+        setKesslerSolutions(solsRes.data.solutions || []);
+        setKesslerEvents(evtsRes.data.events || []);
+      } catch (e) { console.error('[Kessler poll]', e); }
+    };
+
+    poll(); // immediate
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
+  }, [isKessler, isDemoMode]);
+
+  // ─── Evasion Maneuver Computation (all alerts with Pc > 30%) ───
+  useEffect(() => {
+    const riskyAlerts = alerts.filter(a => parseFloat(a.probability) > 30);
+    if (riskyAlerts.length === 0 || activeAssets.length === 0) {
       setEvasionManeuvers([]);
       return;
     }
 
     if (isDemoMode) {
-      const maneuvers = redAlerts.slice(0, 3).map(alert =>
+      const maneuvers = riskyAlerts.slice(0, 5).map(alert =>
         computeDemoEvasion(alert, activeAssets, satDb)
       ).filter(Boolean);
       setEvasionManeuvers(maneuvers);
     } else {
-      Promise.all(redAlerts.slice(0, 3).map(alert =>
+      // Live mode: try API first, fall back to demo computation
+      Promise.all(riskyAlerts.slice(0, 5).map(alert =>
         axios.post(API_ENDPOINTS.evasionCompute, {
           obj1_name: alert.primary,
           obj2_name: alert.secondary,
         }).then(r => r.data.evasion ? { ...r.data.evasion, primary: alert.primary, secondary: alert.secondary } : null)
-          .catch(() => null)
+          .catch(() => {
+            // Fallback to demo computation if API fails for this pair
+            return computeDemoEvasion(alert, activeAssets, satDb);
+          })
       )).then(results => setEvasionManeuvers(results.filter(Boolean)));
     }
   }, [alerts, activeAssets, isDemoMode, satDb]);
@@ -371,6 +580,15 @@ export default function Dashboard() {
   const selectedSatData = activeAssets.find(a => a.name === selectedSat);
   const selectedSatInfo = satDb.find(s => s.name === selectedSat);
 
+  // Merge position data + database info for the selected satellite
+  const selectedSatFull = useMemo(() => {
+    if (!selectedSatData) return null;
+    return {
+      ...selectedSatData,
+      ...(selectedSatInfo ? { type: selectedSatInfo.type, regime: selectedSatInfo.regime, altitude: selectedSatInfo.altitude } : {}),
+    };
+  }, [selectedSatData, selectedSatInfo]);
+
   return (
     <>
       {/* ── Globe Canvas ── */}
@@ -381,6 +599,7 @@ export default function Dashboard() {
           conjunctions={conjunctionPairs}
           evasionManeuvers={evasionManeuvers}
           debrisFragments={debrisFragments}
+          selectedSatellite={selectedSatFull}
           kesslerMode={isKessler}
           showPaths={showPaths}
           showGrid={showGrid}
@@ -400,8 +619,9 @@ export default function Dashboard() {
       {/* ── Stat Cards (Top Left, under TopBar) ── */}
       <div className="absolute top-16 left-20 z-20 flex items-start gap-3">
         <StatCard icon={Satellite} label="Objects" value={totalTracked} color="bg-accent-blue" delay={0.1} />
-        <StatCard icon={Shield} label="Alerts" value={activeAlerts} color={criticalAlerts > 0 ? "bg-status-critical" : "bg-status-success"} delay={0.15} />
-        <StatCard icon={Activity} label="Uptime" value="99.9" suffix="%" color="bg-accent-teal" delay={0.2} />
+        <StatCard icon={Shield} label="Alerts" value={activeAlerts} suffix={criticalAlerts > 0 ? `${criticalAlerts} critical` : undefined} color={criticalAlerts > 0 ? "bg-status-critical" : "bg-status-success"} delay={0.15} />
+        <StatCard icon={ShieldCheck} label="Evasions" value={evasionManeuvers.length} suffix="computed" color="bg-emerald-600" delay={0.2} />
+        <StatCard icon={Activity} label="Uptime" value="99.9" suffix="%" color="bg-accent-teal" delay={0.25} />
       </div>
 
       {/* ── Conjunction Alerts (Bottom Right) ── */}
@@ -470,8 +690,20 @@ export default function Dashboard() {
         setIsDemoMode={setIsDemoMode}
       />
 
+      {/* ── Kessler Cascade Panel ── */}
+      <AnimatePresence>
+        {showKesslerPanel && isKessler && (
+          <KesslerPanel
+            status={kesslerStatus}
+            solutions={kesslerSolutions}
+            events={kesslerEvents}
+            onClose={() => setShowKesslerPanel(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── Bottom Telemetry for selected satellite ── */}
-      <BottomTelemetryBar targetData={selectedSatData || activeAssets[0]} />
+      <BottomTelemetryBar targetData={selectedSatData || activeAssets[0]} satInfo={selectedSatInfo} lastUpdate={lastUpdateTime} />
 
       {/* ── Command Palette (Search) ── */}
       <AnimatePresence>

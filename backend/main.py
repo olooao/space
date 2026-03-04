@@ -430,84 +430,132 @@ def api_collision_evade(data: CollisionCheck):
 
 app.include_router(collision_router)
 
-# --- Kessler Service routes (simulation stubs for local dev) ---
+# --- Kessler Service routes (REAL cascade engine, NASA SBAM physics) ---
+import sys as _sys, os as _os, threading as _threading
+_kessler_path = _os.path.join(_os.path.dirname(__file__), "services", "kessler_service", "app")
+if _kessler_path not in _sys.path:
+    _sys.path.insert(0, _kessler_path)
+from cascade_engine import KesslerCascadeEngine
+
 kessler_router = APIRouter(prefix="/api/kessler", tags=["Kessler"])
 
-_kessler_state = {
-    "is_running": False,
-    "total_fragments": 0,
-    "active_fragments": 0,
-    "total_cascade_events": 0,
-    "zone_density": {},
-    "elapsed_steps": 0,
-    "simulation_id": None,
-}
+_cascade_engine = KesslerCascadeEngine()
+_cascade_thread = None
+_cascade_stop_event = _threading.Event()
+
+
+def _run_cascade_loop():
+    """Background thread: step the cascade engine every 1 second."""
+    while not _cascade_stop_event.is_set() and _cascade_engine.is_running:
+        _cascade_engine.step()
+        _cascade_stop_event.wait(1.0)
+
+
+def _get_sat_orbit(name):
+    """Get orbital elements for a named satellite from loaded TLE data."""
+    sat = satellites.get(name)
+    if not sat:
+        sat = next((s for n, s in satellites.items() if name.upper() in n.upper()), None)
+    if not sat:
+        return {"semi_major_axis_km": 6771.0, "inclination_deg": 51.6, "mass_kg": 500.0}
+    t = ts.now()
+    try:
+        geo = sat.at(t)
+        r_km = float((geo.position.km[0]**2 + geo.position.km[1]**2 + geo.position.km[2]**2)**0.5)
+        sub = wgs84.subpoint(geo)
+        return {
+            "semi_major_axis_km": r_km,
+            "inclination_deg": float(sub.latitude.degrees) if abs(sub.latitude.degrees) < 90 else 51.6,
+            "mass_kg": 500.0,
+            "name": sat.name,
+        }
+    except Exception:
+        return {"semi_major_axis_km": 6771.0, "inclination_deg": 51.6, "mass_kg": 500.0}
+
 
 @kessler_router.get("/status")
 def api_kessler_status():
-    return _kessler_state
+    return _cascade_engine._stats()
+
 
 @kessler_router.post("/trigger")
-def api_kessler_trigger():
-    _kessler_state["is_running"] = True
-    _kessler_state["simulation_id"] = f"sim-{random.randint(1000,9999)}"
-    _kessler_state["total_fragments"] = random.randint(500, 3000)
-    _kessler_state["active_fragments"] = _kessler_state["total_fragments"]
-    _kessler_state["total_cascade_events"] = random.randint(1, 5)
-    _kessler_state["zone_density"] = {"200-400": 120, "400-600": 340, "600-800": 890, "800-1000": 1200}
-    return {"message": "Cascade triggered", **_kessler_state}
+def api_kessler_trigger(
+    target_name: str = "ISS (ZARYA)",
+    projectile_mass_kg: float = 950.0,
+    relative_velocity_km_s: float = 10.5,
+):
+    global _cascade_thread
+    # Stop any existing simulation
+    if _cascade_engine.is_running:
+        _cascade_stop_event.set()
+        if _cascade_thread and _cascade_thread.is_alive():
+            _cascade_thread.join(timeout=3)
+    _cascade_stop_event.clear()
+
+    # Get real orbital data for the target
+    target_orbit = _get_sat_orbit(target_name)
+
+    # Load active satellites for cascade conjunction screening
+    _cascade_engine.active_satellites = []
+    for name, sat in list(satellites.items())[:100]:
+        try:
+            orb = _get_sat_orbit(name)
+            orb["name"] = name
+            _cascade_engine.active_satellites.append(orb)
+        except Exception:
+            continue
+
+    # Trigger the collision using NASA SBAM physics
+    event = _cascade_engine.trigger_initial_collision(
+        target_name=target_name,
+        target_orbit=target_orbit,
+        projectile_mass_kg=projectile_mass_kg,
+        relative_velocity_km_s=relative_velocity_km_s,
+    )
+
+    # Start background simulation loop
+    _cascade_thread = _threading.Thread(target=_run_cascade_loop, daemon=True)
+    _cascade_thread.start()
+
+    stats = _cascade_engine._stats()
+    stats["event"] = event
+    return stats
+
 
 @kessler_router.post("/stop")
 def api_kessler_stop():
-    _kessler_state["is_running"] = False
-    return {"message": "Cascade stopped"}
+    _cascade_stop_event.set()
+    _cascade_engine.is_running = False
+    return {"message": "Cascade simulation stopped", **_cascade_engine._stats()}
+
 
 @kessler_router.post("/reset")
 def api_kessler_reset():
-    _kessler_state.update({
-        "is_running": False, "total_fragments": 0, "active_fragments": 0,
-        "total_cascade_events": 0, "zone_density": {}, "elapsed_steps": 0,
-        "simulation_id": None,
-    })
+    _cascade_stop_event.set()
+    _cascade_engine.reset()
     return {"message": "Reset complete"}
+
 
 @kessler_router.get("/fragments")
 def api_kessler_fragments(limit: int = 2000):
-    if not _kessler_state["is_running"]:
-        return {"total": 0, "fragments": []}
-    fragments = []
-    t_now = ts.now()
-    keys = list(satellites.keys())
-    for i in range(min(limit, 200)):
-        sat = satellites.get(random.choice(keys)) if keys else None
-        if sat:
-            try:
-                geo = sat.at(t_now)
-                sub = wgs84.subpoint(geo)
-                fragments.append({
-                    "id": i, "lat": sub.latitude.degrees + random.uniform(-5, 5),
-                    "lon": sub.longitude.degrees + random.uniform(-5, 5),
-                    "alt_km": sub.elevation.km + random.uniform(-50, 50),
-                    "generation": random.randint(0, 3), "is_active": True
-                })
-            except Exception:
-                continue
-    return {"total": _kessler_state["total_fragments"], "fragments": fragments}
+    frags = _cascade_engine.get_active_fragment_positions(limit=limit)
+    return {
+        "total": _cascade_engine._stats()["active_fragments"],
+        "fragments": frags,
+    }
+
 
 @kessler_router.get("/solutions")
 def api_kessler_solutions():
-    if not _kessler_state["is_running"]:
-        return {"solutions": []}
-    return {"solutions": [
-        {"zone": "800-1000km", "fragment_count": 1200, "recommended_action": "Active Debris Removal (ADR)",
-         "target_altitude_km": 750, "delta_v_m_s": 45.2, "priority": "CRITICAL", "estimated_clearance_years": 3.5},
-        {"zone": "600-800km", "fragment_count": 890, "recommended_action": "Electrodynamic Tether Deorbit",
-         "target_altitude_km": 550, "delta_v_m_s": 32.1, "priority": "HIGH", "estimated_clearance_years": 5.0},
-    ]}
+    solutions = _cascade_engine.get_solutions()
+    return {"solutions": solutions}
+
 
 @kessler_router.get("/events")
 def api_kessler_events(limit: int = 50):
-    return {"events": []}
+    events = _cascade_engine.cascade_events[-limit:]
+    return {"events": events}
+
 
 @kessler_router.get("/health")
 def api_kessler_health():
