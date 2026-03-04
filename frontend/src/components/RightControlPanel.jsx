@@ -92,6 +92,12 @@ export default function RightControlPanel({
     setKesslerMode,
     showPaths,
     setShowPaths,
+    showAtmosphere,
+    setShowAtmosphere,
+    showGrid,
+    setShowGrid,
+    showGroundTracks,
+    setShowGroundTracks,
     isDemoMode,
     setIsDemoMode,
 }) {
@@ -159,9 +165,9 @@ export default function RightControlPanel({
                                 <Section title="Visualization" icon={Eye}>
                                     <div className="space-y-3">
                                         <Toggle label="Orbital Paths" description="Show trajectory arcs" active={showPaths} onClick={() => setShowPaths(!showPaths)} />
-                                        <Toggle label="Atmosphere" description="Fresnel glow layer" active={true} onClick={() => { }} />
-                                        <Toggle label="Coordinate Grid" description="Lat/Lon reference lines" active={true} onClick={() => { }} />
-                                        <Toggle label="Ground Tracks" description="Surface projection" active={showPaths} onClick={() => setShowPaths(!showPaths)} />
+                                        <Toggle label="Atmosphere" description="Fresnel glow layer" active={showAtmosphere} onClick={() => setShowAtmosphere && setShowAtmosphere(!showAtmosphere)} />
+                                        <Toggle label="Coordinate Grid" description="Lat/Lon reference lines" active={showGrid} onClick={() => setShowGrid && setShowGrid(!showGrid)} />
+                                        <Toggle label="Ground Tracks" description="Surface projection" active={showGroundTracks} onClick={() => setShowGroundTracks && setShowGroundTracks(!showGroundTracks)} />
                                     </div>
                                 </Section>
 

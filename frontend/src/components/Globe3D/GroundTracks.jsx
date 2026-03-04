@@ -1,8 +1,8 @@
 /**
  * GroundTracks.jsx — Satellite ground track lines on Earth surface.
  *
- * Projects orbital paths onto the globe surface (alt=0) as thin colored lines.
- * Shows where a satellite's orbit passes over on the ground.
+ * Projects orbital paths onto the globe surface as thin colored lines.
+ * Uses drei <Line> for StrictMode-safe rendering.
  *
  * Color coding by satellite type:
  *   ISS      → cyan
@@ -10,10 +10,10 @@
  *   debris   → orange
  *   default  → blue
  *
- * Capped at 8 tracks. Each track is a single line draw call.
+ * Capped at 8 tracks.
  */
 import { useMemo } from "react";
-import * as THREE from "three";
+import { Line } from "@react-three/drei";
 import { latLonAltToVector3 } from "./utils";
 
 const TRACK_COLORS = {
@@ -27,38 +27,32 @@ function getTrackColor(sat) {
   const name = (sat.name || "").toUpperCase();
   if (name.includes("ISS")) return TRACK_COLORS.ISS;
   if (name.includes("STARLINK")) return TRACK_COLORS.STARLINK;
-  if (sat.type === "debris") return TRACK_COLORS.DEBRIS;
+  const type = (sat.type || "").toLowerCase();
+  if (type === "debris" || sat.status === "debris" || sat.status === "defunct") return TRACK_COLORS.DEBRIS;
   return TRACK_COLORS.DEFAULT;
 }
 
 function GroundTrackLine({ pathPoints, color }) {
-  const positions = useMemo(() => {
+  const points = useMemo(() => {
     if (!pathPoints || pathPoints.length < 4) return null;
 
-    // Project each path point onto the surface (alt=0, radius slightly above globe)
-    const surfacePoints = [];
-    for (let i = 0; i < pathPoints.length; i++) {
-      const [lon, lat] = pathPoints[i];
+    return pathPoints.map(([lon, lat]) => {
       const p = latLonAltToVector3(lat, lon, 5); // 5km above surface
-      surfacePoints.push(p.x, p.y, p.z);
-    }
-    return new Float32Array(surfacePoints);
+      return [p.x, p.y, p.z];
+    });
   }, [pathPoints]);
 
-  if (!positions) return null;
+  if (!points) return null;
 
   return (
-    <line>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial
-        color={color}
-        transparent
-        opacity={0.25}
-        depthWrite={false}
-      />
-    </line>
+    <Line
+      points={points}
+      color={color}
+      transparent
+      opacity={0.25}
+      lineWidth={1}
+      depthWrite={false}
+    />
   );
 }
 

@@ -92,6 +92,97 @@ export function generateMockAlerts() {
 // Debris flagged for conjunction warning arcs
 const RED_DEBRIS = ['COSMOS 2251 DEB', 'FENGYUN 1C DEB', 'SL-16 R/B'];
 
+// Clohessy-Wiltshire evasion computation for demo mode
+const MU_EARTH = 398600.4418; // km³/s²
+const R_EARTH = 6371.0;       // km
+const G0 = 9.80665e-3;        // km/s²
+
+export function computeDemoEvasion(alert, activeAssets, satDb) {
+    const sat = activeAssets.find(a => a.name === alert.primary);
+    const debris = activeAssets.find(a => a.name === alert.secondary);
+    if (!sat || !debris || !sat.path || sat.path.length < 10) return null;
+
+    const satInfo = satDb.find(s => s.name === alert.primary);
+    const satMass = satInfo?.mass || 500;
+    const alt_km = sat.alt_km || 400;
+    const r = R_EARTH + alt_km;
+
+    // Mean motion (rad/s)
+    const n = Math.sqrt(MU_EARTH / (r * r * r));
+
+    // Relative state approximation
+    const dLat = (debris.lat - sat.lat) * (Math.PI / 180) * r;
+    const dLon = (debris.lon - sat.lon) * (Math.PI / 180) * r * Math.cos(sat.lat * Math.PI / 180);
+    const dAlt = (debris.alt_km || 400) - alt_km;
+    const missKm = Math.sqrt(dLat * dLat + dLon * dLon + dAlt * dAlt);
+
+    // Relative velocity approximation (LEO ~7.66 km/s, debris at different inclination)
+    const relVel = parseFloat(alert.missDistance) < 2 ? 10.5 : 7.0; // km/s
+
+    // Burn lead time (15 min = 900s)
+    const burnLeadS = 900;
+    const targetMissKm = 5.0;
+
+    // CW state transition: position-from-velocity block (simplified)
+    const nt = n * burnLeadS;
+    const c = Math.cos(nt);
+    const s = Math.sin(nt);
+
+    // Simplified CW optimal ΔV: mostly along-track for LEO
+    // ΔV_along ≈ target_offset / (2 * (1 - cos(nt)) / n)
+    const phi_ri = 2 * (1 - c) / n; // cross-coupling radial→in-track
+    const phi_ii = (4 * s - 3 * nt) / n; // in-track→in-track
+
+    // Optimal in-track ΔV to achieve target miss
+    const dvInTrack = targetMissKm / Math.abs(phi_ii || 1); // km/s
+    const dvMagnitude = dvInTrack * 1000; // m/s
+
+    // Fuel cost (Tsiolkovsky)
+    const isp = 220; // seconds
+    const ve = G0 * isp;
+    const fuelKg = satMass * (1 - Math.exp(-dvInTrack / ve));
+
+    // Direction classification
+    const direction = dvInTrack >= 0 ? 'prograde' : 'retrograde';
+
+    // Burn duration (assume 1N thruster)
+    const burnDurationS = (satMass * dvMagnitude) / 1.0;
+
+    // Generate evasion trajectory: offset the satellite path by the computed ΔV effect
+    // The evasion shifts in-track position over time
+    const evasionPath = sat.path.map(([lon, lat, alt], i) => {
+        const fraction = i / sat.path.length;
+        // Offset grows from burn point to TCA (linearly for visualization)
+        const offsetScale = Math.min(fraction * 2, 1.0);
+        // Shift perpendicular to path (cross-track for visual clarity)
+        const offsetLat = offsetScale * 3.0; // degrees offset
+        const offsetLon = offsetScale * -2.0;
+        return [lon + offsetLon, lat + offsetLat, alt + offsetScale * 5];
+    });
+
+    // Burn point: ~1/3 along the original path
+    const burnIdx = Math.floor(sat.path.length * 0.3);
+    const burnPt = sat.path[burnIdx] || sat.path[0];
+
+    return {
+        primary: alert.primary,
+        secondary: alert.secondary,
+        original_trajectory: sat.path,
+        evasion_trajectory: evasionPath,
+        magnitude_m_s: parseFloat(dvMagnitude.toFixed(2)),
+        fuel_kg: parseFloat(fuelKg.toFixed(2)),
+        burn_duration_s: parseFloat(burnDurationS.toFixed(1)),
+        new_miss_km: targetMissKm,
+        original_miss_km: parseFloat(missKm.toFixed(3)),
+        direction,
+        burn_point: {
+            lat: burnPt[1],
+            lon: burnPt[0],
+            alt_km: burnPt[2] || alt_km,
+        },
+    };
+}
+
 // Generate demo satellite positions on globe
 export function generateDemoPositions(satellites, time) {
     return satellites.map((sat, i) => {
@@ -102,6 +193,19 @@ export function generateDemoPositions(satellites, time) {
         const lat = Math.sin(time * speed + offset) * inc;
         const lon = ((time * speed * 20) + (offset * 50)) % 360;
 
+        // Generate 48-point orbital path
+        const path = [];
+        for (let step = 0; step < 48; step++) {
+            const futureTime = time + (step * 0.05);
+            const pathLat = Math.sin(futureTime * speed + offset) * inc;
+            const pathLon = ((futureTime * speed * 20) + (offset * 50)) % 360;
+            path.push([pathLon, pathLat, alt_km]);
+        }
+
+        // Risk classification
+        const isRedDebris = RED_DEBRIS.includes(sat.name);
+        const isDebris = sat.status === 'debris' || sat.status === 'defunct';
+
         return {
             name: sat.name,
             lat,
@@ -110,6 +214,8 @@ export function generateDemoPositions(satellites, time) {
             velocity: sat.regime === 'GEO' ? 3.07 : sat.regime === 'MEO' ? 3.9 : 7.66,
             type: sat.type,
             status: sat.status,
+            risk_level: isRedDebris ? 'RED' : isDebris ? 'YELLOW' : undefined,
+            path,
         };
     });
 }

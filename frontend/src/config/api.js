@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
   // Collision Service
   analyzeRisk:     `${API_BASE_URL}/collision/analyze`,
   alertFeed:       `${API_BASE_URL}/collision/feed`,
+  evasionCompute:  `${API_BASE_URL}/collision/evade`,
 
   // Kessler Service
   kesslerTrigger:  `${API_BASE_URL}/kessler/trigger`,

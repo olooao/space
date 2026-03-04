@@ -29,6 +29,7 @@ import Satellites from "./Satellites";
 import OrbitalPaths from "./OrbitalPaths";
 import GroundTracks from "./GroundTracks";
 import CollisionArcs from "./CollisionArcs";
+import EvasionArcs from "./EvasionArcs";
 import DebrisField from "./DebrisField";
 
 export { latLonAltToVector3 } from "./utils";
@@ -140,11 +141,13 @@ export default function Globe3D({
   satellites = [],
   constellation = [],
   conjunctions = [],
+  evasionManeuvers = [],
   debrisFragments = [],
   kesslerMode = false,
   showPaths = false,
   showGrid = true,
   showAtmosphere = true,
+  showGroundTracks = true,
   className = "",
 }) {
   const allSats = [...satellites, ...constellation];
@@ -311,11 +314,13 @@ export default function Globe3D({
               <OrbitalPaths data={allSats.slice(0, 10)} />
             )}
 
-            {showPaths && allSats.length > 0 && (
+            {showGroundTracks && allSats.length > 0 && (
               <GroundTracks data={allSats.slice(0, 8)} />
             )}
 
             <CollisionArcs conjunctions={conjunctions} satellites={allSats} />
+
+            <EvasionArcs data={evasionManeuvers} />
 
             {kesslerMode && debrisFragments.length > 0 && (
               <DebrisField fragments={debrisFragments} />

@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import axios from "axios";
 import { API_ENDPOINTS } from "../config/api";
-import { SATELLITE_DATABASE, CONSTELLATIONS, ORBIT_REGIMES, generateMockAlerts, generateDemoPositions } from "../data/satellites";
+import { SATELLITE_DATABASE, CONSTELLATIONS, ORBIT_REGIMES, generateMockAlerts, generateDemoPositions, computeDemoEvasion } from "../data/satellites";
 
 import Globe3D from "../components/Globe3D";
 import TopStatusBar from "../components/TopStatusBar";
 import BottomTelemetryBar from "../components/BottomTelemetryBar";
 import RightControlPanel from "../components/RightControlPanel";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, ArrowRight, Satellite, AlertTriangle, Radio, Shield, Activity, Zap, Globe, ChevronRight, X } from "lucide-react";
+import { Search, ArrowRight, Satellite, AlertTriangle, Radio, Shield, ShieldCheck, Activity, Zap, Globe, ChevronRight, X } from "lucide-react";
 
 /* ═══════════════════════════════════════════
    ANIMATED COUNTER
@@ -63,7 +63,7 @@ function StatCard({ icon: Icon, label, value, suffix, color, delay = 0 }) {
 /* ═══════════════════════════════════════════
    CONJUNCTION ALERT CARD
    ═══════════════════════════════════════════ */
-function AlertCard({ alert, index, onSelect }) {
+function AlertCard({ alert, index, onSelect, evasion }) {
   const risk = parseFloat(alert.probability);
   const riskColor = risk > 60 ? 'text-status-critical' : risk > 30 ? 'text-status-warning' : 'text-accent-blue';
   const riskBg = risk > 60 ? 'bg-status-critical/10 border-status-critical/20' : risk > 30 ? 'bg-status-warning/10 border-status-warning/20' : 'bg-accent-blue/[0.06] border-accent-blue/20';
@@ -90,6 +90,13 @@ function AlertCard({ alert, index, onSelect }) {
         <span>·</span>
         <span>{alert.missDistance} km</span>
       </div>
+      {evasion && (
+        <div className="flex items-center gap-1.5 mt-1.5 text-[10px]">
+          <ShieldCheck size={10} className="text-green-400" />
+          <span className="text-green-400 font-semibold">EVASION COMPUTED</span>
+          <span className="text-text-tertiary">· {evasion.direction} · {evasion.magnitude_m_s?.toFixed(1)} m/s · {evasion.fuel_kg?.toFixed(1)} kg</span>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -190,11 +197,15 @@ export default function Dashboard() {
   const [showPaths, setShowPaths] = useState(true);
   const [showAtmosphere, setShowAtmosphere] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
+  const [showGroundTracks, setShowGroundTracks] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const searchResultsRef = useRef(null);
   const [alerts, setAlerts] = useState([]);
   const [showAlerts, setShowAlerts] = useState(true);
+  const [debrisFragments, setDebrisFragments] = useState([]);
+  const [evasionManeuvers, setEvasionManeuvers] = useState([]);
+  const prevKessler = useRef(false);
 
   const satDb = useMemo(() => SATELLITE_DATABASE, []);
 
@@ -286,6 +297,72 @@ export default function Dashboard() {
     ? allSearchable.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
     : allSearchable;
 
+  // ─── Conjunction Pairs (for CollisionArcs) ───
+  const conjunctionPairs = useMemo(() => {
+    if (alerts.length === 0 || activeAssets.length === 0) return [];
+    return alerts
+      .filter(a => parseFloat(a.probability) > 30)
+      .slice(0, 5)
+      .map(alert => {
+        const sat1 = activeAssets.find(s => s.name === alert.primary);
+        const sat2 = activeAssets.find(s => s.name === alert.secondary);
+        if (!sat1 || !sat2) return null;
+        return { sat1, sat2 };
+      })
+      .filter(Boolean);
+  }, [alerts, activeAssets]);
+
+  // ─── Kessler Debris Generation ───
+  useEffect(() => {
+    if (isKessler && !prevKessler.current) {
+      // Just toggled ON — generate debris cloud around debris objects
+      const debrisSources = activeAssets.filter(
+        s => s.status === 'debris' || s.status === 'defunct'
+      );
+      const fragments = [];
+      const FRAGS_PER_SOURCE = 200;
+      debrisSources.forEach((source) => {
+        for (let i = 0; i < FRAGS_PER_SOURCE; i++) {
+          const spread = 15;
+          fragments.push({
+            lat: source.lat + (Math.random() - 0.5) * spread,
+            lon: source.lon + (Math.random() - 0.5) * spread,
+            alt_km: (source.alt_km || 400) + (Math.random() - 0.5) * 200,
+            generation: Math.floor(Math.random() * 4),
+          });
+        }
+      });
+      setDebrisFragments(fragments);
+    } else if (!isKessler) {
+      setDebrisFragments([]);
+    }
+    prevKessler.current = isKessler;
+  }, [isKessler]); // activeAssets intentionally excluded
+
+  // ─── Evasion Maneuver Computation ───
+  useEffect(() => {
+    const redAlerts = alerts.filter(a => parseFloat(a.probability) > 60);
+    if (redAlerts.length === 0 || activeAssets.length === 0) {
+      setEvasionManeuvers([]);
+      return;
+    }
+
+    if (isDemoMode) {
+      const maneuvers = redAlerts.slice(0, 3).map(alert =>
+        computeDemoEvasion(alert, activeAssets, satDb)
+      ).filter(Boolean);
+      setEvasionManeuvers(maneuvers);
+    } else {
+      Promise.all(redAlerts.slice(0, 3).map(alert =>
+        axios.post(API_ENDPOINTS.evasionCompute, {
+          obj1_name: alert.primary,
+          obj2_name: alert.secondary,
+        }).then(r => r.data.evasion ? { ...r.data.evasion, primary: alert.primary, secondary: alert.secondary } : null)
+          .catch(() => null)
+      )).then(results => setEvasionManeuvers(results.filter(Boolean)));
+    }
+  }, [alerts, activeAssets, isDemoMode, satDb]);
+
   // ─── Stats ───
   const totalTracked = satellites.length + constellationData.length;
   const activeAlerts = alerts.filter(a => parseFloat(a.probability) > 30).length;
@@ -301,10 +378,14 @@ export default function Dashboard() {
         <Globe3D
           satellites={activeAssets}
           constellation={constellationData}
+          conjunctions={conjunctionPairs}
+          evasionManeuvers={evasionManeuvers}
+          debrisFragments={debrisFragments}
           kesslerMode={isKessler}
           showPaths={showPaths}
           showGrid={showGrid}
           showAtmosphere={showAtmosphere}
+          showGroundTracks={showGroundTracks}
           className="w-full h-full"
         />
       </div>
@@ -348,7 +429,13 @@ export default function Dashboard() {
               </div>
               <div className="max-h-[240px] overflow-y-auto scrollbar-hide">
                 {alerts.slice(0, 5).map((alert, i) => (
-                  <AlertCard key={alert.id} alert={alert} index={i} onSelect={setSelectedSat} />
+                  <AlertCard
+                    key={alert.id}
+                    alert={alert}
+                    index={i}
+                    onSelect={setSelectedSat}
+                    evasion={evasionManeuvers.find(e => e.primary === alert.primary)}
+                  />
                 ))}
               </div>
             </div>
@@ -373,6 +460,12 @@ export default function Dashboard() {
         setKesslerMode={setIsKessler}
         showPaths={showPaths}
         setShowPaths={setShowPaths}
+        showAtmosphere={showAtmosphere}
+        setShowAtmosphere={setShowAtmosphere}
+        showGrid={showGrid}
+        setShowGrid={setShowGrid}
+        showGroundTracks={showGroundTracks}
+        setShowGroundTracks={setShowGroundTracks}
         isDemoMode={isDemoMode}
         setIsDemoMode={setIsDemoMode}
       />

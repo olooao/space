@@ -2,8 +2,9 @@
  * CollisionArcs.jsx — Conjunction warning arcs between at-risk objects.
  *
  * Draws curved arcs between pairs of satellites flagged for collision risk.
- * Each arc rises above the globe surface in a parabolic bezier curve.
+ * Each arc rises above the globe surface in a bezier curve.
  * Pulsing opacity animation for visual urgency.
+ * Uses drei <Line> for StrictMode-safe rendering.
  *
  * Input: array of { sat1, sat2 } pairs where each has lat/lon/alt_km.
  * Alternatively, auto-generates arcs from satellites with risk_level "RED".
@@ -12,6 +13,7 @@
  */
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { Line } from "@react-three/drei";
 import * as THREE from "three";
 import { latLonAltToVector3 } from "./utils";
 
@@ -26,13 +28,13 @@ function makeArcPoints(p1, p2, segments = 32) {
 
   const curve = new THREE.QuadraticBezierCurve3(v1, mid, v2);
   const pts = curve.getPoints(segments);
-  return new Float32Array(pts.flatMap((p) => [p.x, p.y, p.z]));
+  return pts.map(p => [p.x, p.y, p.z]);
 }
 
 function WarningArc({ from, to }) {
-  const matRef = useRef();
+  const lineRef = useRef();
 
-  const positions = useMemo(() => {
+  const points = useMemo(() => {
     const p1 = latLonAltToVector3(from.lat ?? 0, from.lon ?? 0, from.alt_km ?? 400);
     const p2 = latLonAltToVector3(to.lat ?? 0, to.lon ?? 0, to.alt_km ?? 400);
     return makeArcPoints(p1, p2);
@@ -40,26 +42,22 @@ function WarningArc({ from, to }) {
 
   // Pulsing opacity for urgency
   useFrame(({ clock }) => {
-    if (matRef.current) {
+    if (lineRef.current?.material) {
       const t = clock.getElapsedTime();
-      matRef.current.opacity = 0.3 + Math.sin(t * 3.0) * 0.2;
+      lineRef.current.material.opacity = 0.3 + Math.sin(t * 3.0) * 0.2;
     }
   });
 
   return (
-    <line>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial
-        ref={matRef}
-        color="#ff3333"
-        transparent
-        opacity={0.4}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </line>
+    <Line
+      ref={lineRef}
+      points={points}
+      color="#ff3333"
+      transparent
+      opacity={0.4}
+      lineWidth={1.5}
+      depthWrite={false}
+    />
   );
 }
 

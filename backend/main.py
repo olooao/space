@@ -365,6 +365,69 @@ def api_collision_feed():
 def api_collision_health():
     return {"status": "ok"}
 
+@collision_router.post("/evade")
+def api_collision_evade(data: CollisionCheck):
+    """Compute evasion maneuver for a conjunction event (monolith route)."""
+    import numpy as np
+
+    # Resolve satellites
+    sat1 = satellites.get(data.obj1_name)
+    sat2 = satellites.get(data.obj2_name)
+    if not sat1:
+        sat1 = next((s for name, s in satellites.items() if data.obj1_name.upper() in name.upper()), None)
+    if not sat2:
+        sat2 = next((s for name, s in satellites.items() if data.obj2_name.upper() in name.upper()), None)
+
+    if not sat1 or not sat2:
+        return {"error": "One or both objects not found"}
+
+    t = ts.now()
+    geo1 = sat1.at(t)
+    geo2 = sat2.at(t)
+    pos1 = list(geo1.position.km)
+    pos2 = list(geo2.position.km)
+    vel1 = list(geo1.velocity.km_per_s)
+    vel2 = list(geo2.velocity.km_per_s)
+
+    miss_dist = math.sqrt(sum((p1 - p2) ** 2 for p1, p2 in zip(pos1, pos2)))
+    rel_vel = math.sqrt(sum((v1 - v2) ** 2 for v1, v2 in zip(vel1, vel2)))
+
+    # Import evasion optimizer
+    import sys, os
+    evasion_path = os.path.join(os.path.dirname(__file__), "services", "collision_service", "app")
+    if evasion_path not in sys.path:
+        sys.path.insert(0, evasion_path)
+    from evasion_optimizer import compute_evasion
+
+    target_miss = getattr(data, "target_miss_km", 5.0) if hasattr(data, "target_miss_km") else 5.0
+    burn_lead = getattr(data, "burn_lead_s", 900.0) if hasattr(data, "burn_lead_s") else 900.0
+
+    evasion = compute_evasion(
+        sat_pos_km=pos1,
+        sat_vel_km_s=vel1,
+        debris_pos_km=pos2,
+        debris_vel_km_s=vel2,
+        burn_lead_s=burn_lead,
+        target_miss_km=target_miss,
+    )
+
+    # Risk score
+    risk_score = 100 * math.exp(-miss_dist / 500) if miss_dist > 10 else 99.9
+
+    sub1 = wgs84.subpoint(geo1)
+    sub2 = wgs84.subpoint(geo2)
+
+    return {
+        "obj1_name": sat1.name,
+        "obj2_name": sat2.name,
+        "miss_distance_km": round(miss_dist, 3),
+        "relative_velocity_kms": round(rel_vel, 3),
+        "risk_score": round(risk_score, 2),
+        "evasion": evasion,
+        "obj1_pos": {"lat": sub1.latitude.degrees, "lon": sub1.longitude.degrees, "alt_km": sub1.elevation.km},
+        "obj2_pos": {"lat": sub2.latitude.degrees, "lon": sub2.longitude.degrees, "alt_km": sub2.elevation.km},
+    }
+
 app.include_router(collision_router)
 
 # --- Kessler Service routes (simulation stubs for local dev) ---
